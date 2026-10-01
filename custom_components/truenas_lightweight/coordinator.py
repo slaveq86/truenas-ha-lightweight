@@ -42,6 +42,8 @@ class TrueNASCoordinator(DataUpdateCoordinator[TrueNASData]):
         )
         self.client = client
         self._denied: set[str] = set()
+        # Active alerts by uuid from the last successful alert.list; None until known (startup, denied).
+        self._alert_baseline: dict[str, Alert] | None = None
 
     async def _async_update_data(self) -> TrueNASData:
         try:
@@ -60,8 +62,7 @@ class TrueNASCoordinator(DataUpdateCoordinator[TrueNASData]):
             raise UpdateFailed(str(err)) from err
 
         self._stabilize_boot_time(system)
-        if alerts is not None and self.data is not None:
-            self._fire_alert_events(self.data.active_alerts, [a for a in alerts if not a.dismissed], system)
+        self._track_alerts(alerts, system)
         return TrueNASData(
             system=system,
             stats=self.client.realtime_stats(),
@@ -72,10 +73,20 @@ class TrueNASCoordinator(DataUpdateCoordinator[TrueNASData]):
             snapshot_tasks=snapshot_tasks,
         )
 
-    def _fire_alert_events(self, previous: list[Alert], current: list[Alert], system: SystemInfo) -> None:
-        """Fire EVENT_ALERT for alerts that appeared or cleared since the last poll."""
-        before = {a.uuid: a for a in previous}
-        after = {a.uuid: a for a in current}
+    def _track_alerts(self, alerts: list[Alert] | None, system: SystemInfo) -> None:
+        """Fire EVENT_ALERT for alerts raised/cleared since the last known state.
+
+        The baseline is only (re)seeded, never diffed, when it is unknown: on the first refresh and after
+        alert.list was denied, so pre-existing alerts don't fire as a burst of "raised" events.
+        """
+        if alerts is None:
+            self._alert_baseline = None
+            return
+        before = self._alert_baseline
+        after = {a.uuid: a for a in alerts if not a.dismissed}
+        self._alert_baseline = after
+        if before is None:
+            return
         changes = [("raised", after[u]) for u in after.keys() - before.keys()]
         changes += [("cleared", before[u]) for u in before.keys() - after.keys()]
         for action, alert in sorted(changes, key=lambda c: (-c[1].severity, c[1].uuid)):

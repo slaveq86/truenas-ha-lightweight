@@ -127,7 +127,7 @@ async def test_fetch_all(fake: tuple[FakeTrueNAS, str], session: aiohttp.ClientS
     assert apps["plex"].upgrade_available is True
     assert [a.dismissed for a in alerts] == [False, False, True]
     assert {k: t.state for k, t in rsync.items()} == {"1": "SUCCESS", "2": "FAILED", "3": "PENDING"}
-    assert {k: t.state for k, t in snapshots.items()} == {"1": "SUCCESS", "2": "FAILED"}
+    assert {k: t.state for k, t in snapshots.items()} == {"1": "SUCCESS", "2": "FAILED", "3": "HOLD"}
     # Concurrent calls must share a single login.
     assert server.calls.count("auth.login_with_api_key") == 1
 
@@ -234,9 +234,19 @@ def test_task_prefers_job_over_state() -> None:
 
 def test_task_parsing() -> None:
     never_run = Task.from_rsync({"id": 3, "desc": "Media", "job": None})
-    assert (never_run.state, never_run.last_run, never_run.failed) == ("PENDING", None, False)
+    assert (never_run.state, never_run.last_run, never_run.problem) == ("PENDING", None, False)
 
-    snapshot = Task.from_snapshot(load_fixture("snapshottask_query.json")[1])
-    assert (snapshot.state, snapshot.error, snapshot.failed) == ("FAILED", "dataset is busy", True)
-    assert snapshot.details["lifetime"] == "1 day"
-    assert Task.from_snapshot(load_fixture("snapshottask_query.json")[0]).name == "tank/photos (recursive)"
+    weekly, daily, hourly = (Task.from_snapshot(t) for t in load_fixture("snapshottask_query.json"))
+    assert (daily.state, daily.error, daily.problem) == ("FAILED", "dataset is busy", True)
+    assert daily.details["lifetime"] == "1 day"
+    # Several tasks on one dataset are told apart by retention.
+    assert weekly.name == "tank/photos (recursive, 2 weeks)"
+    assert hourly.name == "tank/photos (recursive, 48 hours)"
+    assert daily.name == "tank/vms (1 day)"
+    # HOLD is a problem and its "reason" is surfaced as the error.
+    assert (hourly.state, hourly.error, hourly.problem) == ("HOLD", "Dataset tank/photos is locked", True)
+
+
+def test_snapshot_task_tolerates_missing_lifetime() -> None:
+    task = Task.from_snapshot({"id": 4, "dataset": "tank/x", "lifetime_value": 2, "lifetime_unit": None})
+    assert (task.name, task.details["lifetime"]) == ("tank/x", None)

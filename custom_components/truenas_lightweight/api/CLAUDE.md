@@ -18,5 +18,5 @@ Must stay **independent of Home Assistant** (no `homeassistant` imports) so it c
 ## Models (`models.py`)
 - Dataclasses with `from_api()` classmethods; parse defensively with `.get()` — field names drift between TrueNAS releases. Only truly required keys (e.g. pool/app `name`) may use `[]`.
 - Enum-like strings are upper-cased here; entities lower-case them.
-- `Task` covers `rsynctask.query` (`from_rsync`) and `pool.snapshottask.query` (`from_snapshot`), keyed by `str(id)`. Last-run state comes from `job` (state/time_finished/error) if present, else the `state` dict (state/datetime/error), else `PENDING`; snapshot states are normalised into `TASK_STATES` (`FINISHED`→`SUCCESS`, `ERROR`→`FAILED`).
+- `Task` covers `rsynctask.query` (`from_rsync`) and `pool.snapshottask.query` (`from_snapshot`), keyed by `str(id)`. Last-run state comes from `job` (state/time_finished/error) if present, else the `state` dict (state/datetime/error, or `reason` for HOLD), else `PENDING`; snapshot states are normalised into `TASK_STATES` (`FINISHED`→`SUCCESS`, `ERROR`→`FAILED`). `Task.problem` = FAILED/ABORTED/HOLD. Snapshot task names include retention (`tank/photos (recursive, 2 weeks)`) because datasets usually have several tasks.
 - When adding fields, add them to the fixtures in `tests/fixtures/` too.

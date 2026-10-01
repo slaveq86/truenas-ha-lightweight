@@ -11,8 +11,11 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
 ### Added
 
 - Rsync task entities: status, last run time and a problem binary sensor (with the error message) per task.
-- Periodic snapshot task entities: status, last run time and a problem binary sensor per task.
-- `truenas_lightweight_alert` event fired when an alert is raised or cleared, for per-alert notifications.
+- Periodic snapshot task entities: status, last run time and a problem binary sensor per task, named after the
+  dataset and retention (e.g. `tank/photos (recursive, 2 weeks)`). Tasks on hold (e.g. locked dataset) count as a
+  problem and show the reason.
+- `truenas_lightweight_alert` event fired when an alert is raised or cleared (dismissing counts as cleared), for
+  per-alert notifications. Existing alerts are not replayed at startup or when alert access is regained.
 
 ## [0.0.1] - 2026-10-01
 

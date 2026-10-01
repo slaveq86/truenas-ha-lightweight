@@ -30,18 +30,20 @@ All entities belong to one device representing the TrueNAS host.
 | Pool *name* problem | binary sensor | on when ZFS reports the pool unhealthy |
 | App *name* state | enum sensor | `running`, `deploying`, `stopping`, `stopped`, `crashed` |
 | App *name* update | binary sensor | on when a newer catalog version is available |
-| Rsync *task* status | enum sensor | `pending`, `waiting`, `running`, `success`, `failed`, `aborted`; attributes: direction, path, remote, error |
+| Rsync *task* status | enum sensor | `pending`, `waiting`, `running`, `success`, `failed`, `aborted`, `hold`; attributes: direction, path, remote, error |
 | Rsync *task* last run | timestamp | when the last run finished |
-| Rsync *task* problem | binary sensor | on when the last run failed or was aborted; `error` attribute |
-| Snapshot *dataset* status / last run / problem | as above | periodic snapshot tasks; attributes: naming schema, lifetime |
+| Rsync *task* problem | binary sensor | on when the last run failed or was aborted, or the task is on hold; `error` attribute |
+| Snapshot *dataset (retention)* status / last run / problem | as above | periodic snapshot tasks; attributes: naming schema, lifetime |
 
 New pools, apps and tasks are picked up automatically; removed ones become unavailable. Rsync tasks are named after
-their description (or path if empty), snapshot tasks after their dataset.
+their description (or path if empty), snapshot tasks after their dataset and retention, e.g.
+*Snapshot tank/photos (recursive, 2 weeks) status*, so several tasks on one dataset stay distinguishable.
 
 ## Alert events
 
 Whenever an alert appears in or disappears from TrueNAS, the integration fires a `truenas_lightweight_alert` event
-(checked every update interval; nothing is fired for alerts already active when Home Assistant starts):
+(checked every update interval; nothing is fired for alerts already active when Home Assistant starts).
+Dismissing an alert in TrueNAS counts as `cleared`, restoring it as `raised`:
 
 ```yaml
 event_type: truenas_lightweight_alert

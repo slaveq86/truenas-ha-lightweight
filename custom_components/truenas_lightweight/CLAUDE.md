@@ -17,7 +17,7 @@
 - Realtime stats (`data.stats`) can be `None` — use `requires_stats=True` on descriptions that depend on it.
 
 ## Alert events
-The coordinator diffs active alert uuids against the previous poll and fires `EVENT_ALERT` (`truenas_lightweight_alert`, `action: raised|cleared`). Never fire on the first refresh, and pass `None` (not `[]`) as the `alert.list` default so a permission denial isn't read as every alert clearing. The event payload is public API for users' automations — only add fields.
+The coordinator diffs active (non-dismissed) alert uuids against `_alert_baseline` and fires `EVENT_ALERT` (`truenas_lightweight_alert`, `action: raised|cleared`). The baseline is `None` on the first refresh and after `alert.list` is denied (its `_optional` default is `None`, not `[]`); while `None` it is only re-seeded, never diffed, so neither startup, a denial nor regained access replays existing alerts. The event payload is public API for users' automations — only add fields.
 
 ## Config flow
 User step validates with `subscribe_realtime=False`, splits host/URL input via `_split_host` (a port in a pasted URL overrides the Port field; IPv6 stored without brackets — the client adds them), unique id = host_id. Reauth replaces only the API key and aborts with `wrong_device` if host_id differs. Options change reloads the entry.

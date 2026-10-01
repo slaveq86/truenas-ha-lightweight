@@ -98,7 +98,7 @@ class TrueNASAppUpdateSensor(TrueNASEntity, BinarySensorEntity):
 
 
 class TrueNASTaskProblemSensor(TrueNASTaskEntity, BinarySensorEntity):
-    """On when the task's last run failed or was aborted."""
+    """On when the task's last run failed or was aborted, or the task is on hold."""
 
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
 
@@ -108,7 +108,7 @@ class TrueNASTaskProblemSensor(TrueNASTaskEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool:
-        return self.task.failed
+        return self.task.problem
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

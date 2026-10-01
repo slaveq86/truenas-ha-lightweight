@@ -7,7 +7,12 @@
     "lifetime_unit": "WEEK",
     "naming_schema": "auto-%Y-%m-%d_%H-%M",
     "enabled": true,
-    "state": {"state": "FINISHED", "datetime": {"$date": 1759300000000}}
+    "state": {
+      "state": "FINISHED",
+      "datetime": {
+        "$date": 1759300000000
+      }
+    }
   },
   {
     "id": 2,
@@ -17,6 +22,25 @@
     "lifetime_unit": "DAY",
     "naming_schema": "hourly-%Y-%m-%d_%H-%M",
     "enabled": true,
-    "state": {"state": "ERROR", "datetime": {"$date": 1759300000000}, "error": "dataset is busy"}
+    "state": {
+      "state": "ERROR",
+      "datetime": {
+        "$date": 1759300000000
+      },
+      "error": "dataset is busy"
+    }
+  },
+  {
+    "id": 3,
+    "dataset": "tank/photos",
+    "recursive": true,
+    "lifetime_value": 48,
+    "lifetime_unit": "HOUR",
+    "naming_schema": "hourly-%Y-%m-%d_%H-%M",
+    "enabled": true,
+    "state": {
+      "state": "HOLD",
+      "reason": "Dataset tank/photos is locked"
+    }
   }
 ]

@@ -14,6 +14,13 @@ TASK_STATES = ["PENDING", "WAITING", "RUNNING", "SUCCESS", "FAILED", "ABORTED", 
 _TASK_STATE_ALIASES = {"FINISHED": "SUCCESS", "ERROR": "FAILED"}
 
 
+def _lifetime(value: Any, unit: Any) -> str | None:
+    """Format snapshot retention, e.g. (2, "WEEK") -> "2 weeks"."""
+    if not isinstance(value, int) or value <= 0 or not isinstance(unit, str) or not unit:
+        return None
+    return f"{value} {unit.lower()}{'' if value == 1 else 's'}"
+
+
 def _parse_date(value: Any) -> datetime | None:
     """Parse TrueNAS JSON-RPC datetime encoding ({"$date": epoch_ms})."""
     if isinstance(value, dict) and isinstance(value.get("$date"), int | float):
@@ -202,14 +209,16 @@ class Task:
     @classmethod
     def from_snapshot(cls, data: dict[str, Any]) -> Task:
         dataset = data.get("dataset") or f"Task {data['id']}"
-        lifetime = data.get("lifetime_value")
+        lifetime = _lifetime(data.get("lifetime_value"), data.get("lifetime_unit"))
+        # Datasets commonly have several tasks (hourly/daily/...); retention tells them apart.
+        qualifiers = [q for q in ("recursive" if data.get("recursive") else None, lifetime) if q]
         return cls._build(
             data,
-            name=f"{dataset} (recursive)" if data.get("recursive") else dataset,
+            name=f"{dataset} ({', '.join(qualifiers)})" if qualifiers else dataset,
             details={
                 "dataset": data.get("dataset"),
                 "naming_schema": data.get("naming_schema"),
-                "lifetime": f"{lifetime} {data.get('lifetime_unit', '').lower()}".strip() if lifetime else None,
+                "lifetime": lifetime,
             },
         )
 
@@ -225,7 +234,8 @@ class Task:
         else:
             raw = state.get("state")
             last_run = _parse_date(state.get("datetime"))
-            error = state.get("error")
+            # HOLD states explain themselves in "reason" rather than "error".
+            error = state.get("error") or state.get("reason")
         raw = (raw or "PENDING").upper()
         return cls(
             id=data["id"],
@@ -238,8 +248,9 @@ class Task:
         )
 
     @property
-    def failed(self) -> bool:
-        return self.state in ("FAILED", "ABORTED")
+    def problem(self) -> bool:
+        """Last run failed or was aborted, or the task is held (e.g. its dataset is locked)."""
+        return self.state in ("FAILED", "ABORTED", "HOLD")
 
 
 @dataclass(slots=True)

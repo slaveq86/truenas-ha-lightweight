@@ -72,10 +72,12 @@ async def test_entities(hass: HomeAssistant, mock_client: AsyncMock, mock_config
         "binary_sensor.truenas_rsync_mnt_tank_docs_problem": STATE_ON,
         "sensor.truenas_rsync_never_run_status": "pending",
         "sensor.truenas_rsync_never_run_last_run": "unknown",
-        "sensor.truenas_snapshot_tank_photos_recursive_status": "success",
-        "binary_sensor.truenas_snapshot_tank_photos_recursive_problem": STATE_OFF,
-        "sensor.truenas_snapshot_tank_vms_status": "failed",
-        "binary_sensor.truenas_snapshot_tank_vms_problem": STATE_ON,
+        "sensor.truenas_snapshot_tank_photos_recursive_2_weeks_status": "success",
+        "binary_sensor.truenas_snapshot_tank_photos_recursive_2_weeks_problem": STATE_OFF,
+        "sensor.truenas_snapshot_tank_photos_recursive_48_hours_status": "hold",
+        "binary_sensor.truenas_snapshot_tank_photos_recursive_48_hours_problem": STATE_ON,
+        "sensor.truenas_snapshot_tank_vms_1_day_status": "failed",
+        "binary_sensor.truenas_snapshot_tank_vms_1_day_problem": STATE_ON,
     }
     for entity_id, state in expected.items():
         assert (s := hass.states.get(entity_id)) is not None, entity_id
@@ -92,7 +94,9 @@ async def test_entities(hass: HomeAssistant, mock_client: AsyncMock, mock_config
     assert docs["direction"] == "pull"
     assert docs["remote"] == "docs"
     assert docs["error"].startswith("rsync command returned 255")
-    assert hass.states.get("binary_sensor.truenas_snapshot_tank_vms_problem").attributes["error"] == "dataset is busy"
+    assert hass.states.get("binary_sensor.truenas_snapshot_tank_vms_1_day_problem").attributes["error"] == (
+        "dataset is busy"
+    )
     assert (
         er.async_get(hass).async_get("sensor.truenas_rsync_never_run_status").unique_id == f"{HOST_ID}_rsync_3_status"
     )
@@ -162,6 +166,25 @@ async def test_alert_permission_denied_fires_nothing(
 
     assert events == []
     assert hass.states.get("sensor.truenas_active_alerts").state == "0"
+
+
+async def test_alert_permission_restored_does_not_replay(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    events = async_capture_events(hass, EVENT_ALERT)
+    await _setup(hass, mock_config_entry)
+    alerts = mock_client.alerts.return_value
+
+    mock_client.alerts.side_effect = TrueNASPermissionError("EACCES")
+    await _tick(hass)
+    # Access is back: the long-standing alerts only re-seed the baseline.
+    mock_client.alerts.side_effect = None
+    await _tick(hass)
+    assert events == []
+
+    mock_client.alerts.return_value = [*alerts, Alert("a9", "SMART", "CRITICAL", "Disk sda failing.", False, None)]
+    await _tick(hass)
+    assert [(e.data["action"], e.data["uuid"]) for e in events] == [("raised", "a9")]
 
 
 async def test_boot_time_stable_until_reboot(
