@@ -10,32 +10,40 @@ Requires **TrueNAS 25.04 or newer** and **Home Assistant 2025.2 or newer**.
 
 ## Entities
 
-All entities belong to one device representing the TrueNAS host.
+Entities are grouped into devices; the child devices show as *connected via* the TrueNAS host:
 
-| Entity | Type | Notes |
-|---|---|---|
-| CPU usage | sensor (%) | from the `reporting.realtime` feed |
-| CPU temperature | sensor (°C) | disabled by default; not available on every host |
-| Memory usage / used / available | sensor (%, GiB) | |
-| ZFS ARC size | sensor (GiB) | disabled by default |
-| Load (1/5/15 min) | sensor | |
-| Last boot | timestamp | diagnostic |
-| Version | sensor | diagnostic |
-| Active alerts | sensor (count) | `alerts` attribute lists level, class and message |
-| Highest alert level | enum sensor | `ok`, `info` … `emergency` |
-| Problem | binary sensor | on when any active alert is WARNING or worse |
-| Apps running | sensor (count) | |
-| Pool *name* status | enum sensor | `online`, `degraded`, `faulted`, … |
-| Pool *name* usage / free space | sensor (%, GiB) | |
-| Pool *name* problem | binary sensor | on when ZFS reports the pool unhealthy |
-| App *name* state | enum sensor | `running`, `deploying`, `stopping`, `stopped`, `crashed` |
-| App *name* update | binary sensor | on when a newer catalog version is available |
-| Rsync *task* status | enum sensor | `pending`, `waiting`, `running`, `success`, `failed`, `aborted`, `hold`; attributes: direction, path, remote, error |
-| Rsync *task* last run | timestamp | when the last run finished |
-| Rsync *task* problem | binary sensor | on when the last run failed or was aborted, or the task is on hold; `error` attribute |
-| Snapshot *dataset (retention)* status / last run / problem | as above | periodic snapshot tasks; attributes: naming schema, lifetime |
+| Device | Entities |
+|---|---|
+| *hostname* (the TrueNAS host) | system, alert and overall problem entities |
+| *hostname* Pool *name* (one per pool) | pool status, usage, free space, problem |
+| *hostname* Apps | apps running, and state + update per app |
+| *hostname* Data protection | rsync and periodic snapshot tasks |
 
-New pools, apps and tasks are picked up automatically; removed ones become unavailable. Rsync tasks are named after
+| Entity | Device | Type | Notes |
+|---|---|---|---|
+| CPU usage | host | sensor (%) | from the `reporting.realtime` feed |
+| CPU temperature | host | sensor (°C) | disabled by default; not available on every host |
+| Memory usage / used / available | host | sensor (%, GiB) | |
+| ZFS ARC size | host | sensor (GiB) | disabled by default |
+| Load (1/5/15 min) | host | sensor | |
+| Last boot | host | timestamp | diagnostic |
+| Version | host | sensor | diagnostic |
+| Active alerts | host | sensor (count) | `alerts` attribute lists level, class and message |
+| Highest alert level | host | enum sensor | `ok`, `info` … `emergency` |
+| Problem | host | binary sensor | on when any active alert is WARNING or worse |
+| Status | pool | enum sensor | `online`, `degraded`, `faulted`, … |
+| Usage / Free space | pool | sensor (%, GiB) | |
+| Problem | pool | binary sensor | on when ZFS reports the pool unhealthy |
+| Running | Apps | sensor (count) | number of running apps |
+| *app* state | Apps | enum sensor | `running`, `deploying`, `stopping`, `stopped`, `crashed` |
+| *app* update | Apps | binary sensor | on when a newer catalog version is available |
+| Rsync *task* status | Data protection | enum sensor | `pending`, `waiting`, `running`, `success`, `failed`, `aborted`, `hold`; attributes: direction, path, remote, error |
+| Rsync *task* last run | Data protection | timestamp | when the last run finished |
+| Rsync *task* problem | Data protection | binary sensor | on when the last run failed or was aborted, or the task is on hold; `error` attribute |
+| Snapshot *dataset (retention)* status / last run / problem | Data protection | as above | periodic snapshot tasks; attributes: naming schema, lifetime |
+
+New pools, apps and tasks are picked up automatically; removed ones become unavailable (the device of a deleted pool
+can then be deleted from its device page). Rsync tasks are named after
 their description (or path if empty), snapshot tasks after their dataset and retention, e.g.
 *Snapshot tank/photos (recursive, 2 weeks) status*, so several tasks on one dataset stay distinguishable.
 

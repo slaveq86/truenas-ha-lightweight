@@ -5,8 +5,10 @@ from __future__ import annotations
 from homeassistant.const import CONF_API_KEY, CONF_HOST, CONF_PORT, CONF_VERIFY_SSL, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.device_registry import DeviceEntry
 
 from .api import TrueNASClient
+from .const import DOMAIN
 from .coordinator import TrueNASConfigEntry, TrueNASCoordinator
 
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR]
@@ -42,3 +44,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: TrueNASConfigEntry) -> 
 
 async def _async_reload(hass: HomeAssistant, entry: TrueNASConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def async_remove_config_entry_device(hass: HomeAssistant, entry: TrueNASConfigEntry, device: DeviceEntry) -> bool:
+    """Allow deleting the device of a pool that no longer exists; the host and grouped devices stay."""
+    prefix = f"{entry.unique_id}_pool_"
+    pools = entry.runtime_data.data.pools
+    return any(
+        domain == DOMAIN and ident.startswith(prefix) and ident.removeprefix(prefix) not in pools
+        for domain, ident in device.identifiers
+    )

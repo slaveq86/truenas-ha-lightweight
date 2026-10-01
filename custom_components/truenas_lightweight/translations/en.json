@@ -46,16 +46,27 @@
       }
     }
   },
+  "device": {
+    "pool": {
+      "name": "{host} Pool {pool}"
+    },
+    "apps": {
+      "name": "{host} Apps"
+    },
+    "data_protection": {
+      "name": "{host} Data protection"
+    }
+  },
   "entity": {
     "binary_sensor": {
       "problem": {
         "name": "Problem"
       },
       "pool_problem": {
-        "name": "Pool {pool} problem"
+        "name": "Problem"
       },
       "app_update": {
-        "name": "App {app} update"
+        "name": "{app} update"
       },
       "rsync_problem": {
         "name": "Rsync {task} problem"
@@ -115,10 +126,10 @@
         }
       },
       "apps_running": {
-        "name": "Apps running"
+        "name": "Running"
       },
       "pool_status": {
-        "name": "Pool {pool} status",
+        "name": "Status",
         "state": {
           "online": "Online",
           "degraded": "Degraded",
@@ -129,13 +140,13 @@
         }
       },
       "pool_used_pct": {
-        "name": "Pool {pool} usage"
+        "name": "Usage"
       },
       "pool_free": {
-        "name": "Pool {pool} free space"
+        "name": "Free space"
       },
       "app_state": {
-        "name": "App {app} state",
+        "name": "{app} state",
         "state": {
           "running": "Running",
           "deploying": "Deploying",

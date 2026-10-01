@@ -17,17 +17,48 @@ from .const import DOMAIN
 from .coordinator import TrueNASCoordinator
 
 
+def child_device(
+    coordinator: TrueNASCoordinator,
+    suffix: str,
+    translation_key: str,
+    model: str,
+    placeholders: dict[str, str] | None = None,
+) -> DeviceInfo:
+    """A device shown as connected via the TrueNAS host (pool, apps, data protection)."""
+    host_id = coordinator.config_entry.unique_id
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"{host_id}_{suffix}")},
+        translation_key=translation_key,
+        translation_placeholders={"host": coordinator.data.system.hostname, **(placeholders or {})},
+        manufacturer="iXsystems",
+        model=model,
+        via_device=(DOMAIN, host_id),
+    )
+
+
+def pool_device(coordinator: TrueNASCoordinator, pool: str) -> DeviceInfo:
+    return child_device(coordinator, f"pool_{pool}", "pool", "ZFS pool", {"pool": pool})
+
+
+def apps_device(coordinator: TrueNASCoordinator) -> DeviceInfo:
+    return child_device(coordinator, "apps", "apps", "Apps")
+
+
+def data_protection_device(coordinator: TrueNASCoordinator) -> DeviceInfo:
+    return child_device(coordinator, "data_protection", "data_protection", "Data protection")
+
+
 class TrueNASEntity(CoordinatorEntity[TrueNASCoordinator]):
-    """All entities belong to the single TrueNAS host device."""
+    """Entities sit on the TrueNAS host device unless given a child device."""
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: TrueNASCoordinator, unique_suffix: str) -> None:
+    def __init__(self, coordinator: TrueNASCoordinator, unique_suffix: str, device: DeviceInfo | None = None) -> None:
         super().__init__(coordinator)
         entry = coordinator.config_entry
         system = coordinator.data.system
         self._attr_unique_id = f"{entry.unique_id}_{unique_suffix}"
-        self._attr_device_info = DeviceInfo(
+        self._attr_device_info = device or DeviceInfo(
             identifiers={(DOMAIN, entry.unique_id)},
             name=system.hostname,
             manufacturer="iXsystems",
@@ -49,7 +80,7 @@ class TrueNASTaskEntity(TrueNASEntity):
     """Entity bound to one rsync/snapshot task; unavailable once the task is deleted."""
 
     def __init__(self, coordinator: TrueNASCoordinator, key: str, kind: str, task_id: str) -> None:
-        super().__init__(coordinator, f"{kind}_{task_id}_{key}")
+        super().__init__(coordinator, f"{kind}_{task_id}_{key}", data_protection_device(coordinator))
         self._kind = kind
         self._task_id = task_id
         self._attr_translation_placeholders = {"task": self.task.name}

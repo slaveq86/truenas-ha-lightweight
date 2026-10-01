@@ -14,4 +14,4 @@ Run with `pytest` (Python 3.13, `pytest-homeassistant-custom-component` pinned i
 
 ## Gotchas
 - After `async_fire_time_changed`, use `hass.async_block_till_done(wait_background_tasks=True)` — coordinator refreshes run as background tasks (see `_tick`).
-- Entity ids derive from the device name `truenas` + translated names, e.g. `sensor.truenas_pool_tank_status`.
+- Entity ids derive from the device name + translated entity name: host `truenas` → `sensor.truenas_cpu_usage`; child devices `truenas Pool tank` → `sensor.truenas_pool_tank_status`, `truenas Apps` → `sensor.truenas_apps_plex_state`, `truenas Data protection` → `sensor.truenas_data_protection_rsync_…`.

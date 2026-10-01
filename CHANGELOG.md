@@ -17,6 +17,13 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
 - `truenas_lightweight_alert` event fired when an alert is raised or cleared (dismissing counts as cleared), for
   per-alert notifications. Existing alerts are not replayed at startup or when alert access is regained.
 
+### Changed
+
+- Entities are split into child devices connected via the TrueNAS host: one device per pool, one *Apps* device and
+  one *Data protection* device for rsync and snapshot tasks. Existing entity ids are kept; app and task friendly
+  names now start with the device name (e.g. *truenas Apps plex state*, *truenas Data protection Rsync … status*).
+  Devices of deleted pools can be removed from the device page.
+
 ## [0.0.1] - 2026-10-01
 
 ### Added

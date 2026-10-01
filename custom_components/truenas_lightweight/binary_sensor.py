@@ -10,7 +10,15 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import ALERT_LEVELS
 from .coordinator import TrueNASConfigEntry, TrueNASCoordinator
-from .entity import TASK_KINDS, TrueNASEntity, TrueNASTaskEntity, async_track_items, task_items
+from .entity import (
+    TASK_KINDS,
+    TrueNASEntity,
+    TrueNASTaskEntity,
+    apps_device,
+    async_track_items,
+    pool_device,
+    task_items,
+)
 
 WARNING_SEVERITY = ALERT_LEVELS.index("WARNING")
 
@@ -64,9 +72,8 @@ class TrueNASPoolProblemSensor(TrueNASEntity, BinarySensorEntity):
     _attr_translation_key = "pool_problem"
 
     def __init__(self, coordinator: TrueNASCoordinator, pool: str) -> None:
-        super().__init__(coordinator, f"pool_{pool}_problem")
+        super().__init__(coordinator, f"pool_{pool}_problem", pool_device(coordinator, pool))
         self._pool = pool
-        self._attr_translation_placeholders = {"pool": pool}
 
     @property
     def available(self) -> bool:
@@ -84,7 +91,7 @@ class TrueNASAppUpdateSensor(TrueNASEntity, BinarySensorEntity):
     _attr_translation_key = "app_update"
 
     def __init__(self, coordinator: TrueNASCoordinator, app: str) -> None:
-        super().__init__(coordinator, f"app_{app}_update")
+        super().__init__(coordinator, f"app_{app}_update", apps_device(coordinator))
         self._app = app
         self._attr_translation_placeholders = {"app": app}
 

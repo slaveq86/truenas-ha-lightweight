@@ -9,7 +9,8 @@
 - `TrueNASPermissionError` on optional sources (alerts/pools/apps/rsync/snapshot tasks) → logged once, empty default; only `system.info` is mandatory. Wrap new optional sources in `_optional()`.
 
 ## Entities
-- All entities sit on one device keyed by the entry `unique_id` (= `system.host_id`). Unique ids: `{host_id}_{key}`, `{host_id}_pool_{name}_{key}`, `{host_id}_app_{name}_{key}`, `{host_id}_rsync_{task_id}_{key}`, `{host_id}_snapshot_{task_id}_{key}` (task ids, not names, since names are editable) — never change these formats (breaks users' entity registry).
+- Devices: the host `(DOMAIN, host_id)` plus child devices (`via_device` = host) built by `entity.child_device`: `{host_id}_pool_{name}` (one per pool), `{host_id}_apps`, `{host_id}_data_protection` (rsync + snapshot tasks). Names are translated (`device` section in strings, `{host}` placeholder). Pass the device as the third `TrueNASEntity` arg; omitting it means the host. Never change device identifiers. `async_remove_config_entry_device` (`__init__.py`) only allows deleting devices of pools that no longer exist.
+- Unique ids (independent of devices; `host_id` = entry `unique_id` = `system.host_id`): `{host_id}_{key}`, `{host_id}_pool_{name}_{key}`, `{host_id}_app_{name}_{key}`, `{host_id}_rsync_{task_id}_{key}`, `{host_id}_snapshot_{task_id}_{key}` (task ids, not names, since names are editable) — never change these formats (breaks users' entity registry).
 - Sensors are declared as `EntityDescription` tables in `sensor.py` (`value_fn` per description). Add new sensors there, not as new classes.
 - Pools/apps/tasks are added dynamically via `entity.async_track_items`; task entities subclass `TrueNASTaskEntity` (kinds in `TASK_KINDS`); per-item entities must override `available` to go unavailable when the item disappears.
 - Enum sensors: options are lowercase; map API values through `_enum()` so unknown values become `unknown` instead of raising.

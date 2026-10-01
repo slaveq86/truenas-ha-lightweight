@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
@@ -17,6 +18,7 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
+from custom_components.truenas_lightweight import async_remove_config_entry_device
 from custom_components.truenas_lightweight.api import (
     Alert,
     App,
@@ -24,7 +26,7 @@ from custom_components.truenas_lightweight.api import (
     TrueNASConnectionError,
     TrueNASPermissionError,
 )
-from custom_components.truenas_lightweight.const import EVENT_ALERT
+from custom_components.truenas_lightweight.const import DOMAIN, EVENT_ALERT
 from custom_components.truenas_lightweight.diagnostics import async_get_config_entry_diagnostics
 
 from .conftest import HOST_ID
@@ -58,26 +60,26 @@ async def test_entities(hass: HomeAssistant, mock_client: AsyncMock, mock_config
         "sensor.truenas_pool_tank_status": "online",
         "sensor.truenas_pool_tank_usage": "81.0",
         "sensor.truenas_pool_backup_status": "degraded",
-        "sensor.truenas_app_plex_state": "running",
-        "sensor.truenas_app_nextcloud_state": "stopped",
+        "sensor.truenas_apps_plex_state": "running",
+        "sensor.truenas_apps_nextcloud_state": "stopped",
         "binary_sensor.truenas_problem": STATE_ON,
         "binary_sensor.truenas_pool_tank_problem": STATE_OFF,
         "binary_sensor.truenas_pool_backup_problem": STATE_ON,
-        "binary_sensor.truenas_app_plex_update": STATE_ON,
-        "binary_sensor.truenas_app_nextcloud_update": STATE_OFF,
-        "sensor.truenas_rsync_photos_to_backup_status": "success",
-        "sensor.truenas_rsync_photos_to_backup_last_run": "2025-10-01T06:36:40+00:00",
-        "binary_sensor.truenas_rsync_photos_to_backup_problem": STATE_OFF,
-        "sensor.truenas_rsync_mnt_tank_docs_status": "failed",
-        "binary_sensor.truenas_rsync_mnt_tank_docs_problem": STATE_ON,
-        "sensor.truenas_rsync_never_run_status": "pending",
-        "sensor.truenas_rsync_never_run_last_run": "unknown",
-        "sensor.truenas_snapshot_tank_photos_recursive_2_weeks_status": "success",
-        "binary_sensor.truenas_snapshot_tank_photos_recursive_2_weeks_problem": STATE_OFF,
-        "sensor.truenas_snapshot_tank_photos_recursive_48_hours_status": "hold",
-        "binary_sensor.truenas_snapshot_tank_photos_recursive_48_hours_problem": STATE_ON,
-        "sensor.truenas_snapshot_tank_vms_1_day_status": "failed",
-        "binary_sensor.truenas_snapshot_tank_vms_1_day_problem": STATE_ON,
+        "binary_sensor.truenas_apps_plex_update": STATE_ON,
+        "binary_sensor.truenas_apps_nextcloud_update": STATE_OFF,
+        "sensor.truenas_data_protection_rsync_photos_to_backup_status": "success",
+        "sensor.truenas_data_protection_rsync_photos_to_backup_last_run": "2025-10-01T06:36:40+00:00",
+        "binary_sensor.truenas_data_protection_rsync_photos_to_backup_problem": STATE_OFF,
+        "sensor.truenas_data_protection_rsync_mnt_tank_docs_status": "failed",
+        "binary_sensor.truenas_data_protection_rsync_mnt_tank_docs_problem": STATE_ON,
+        "sensor.truenas_data_protection_rsync_never_run_status": "pending",
+        "sensor.truenas_data_protection_rsync_never_run_last_run": "unknown",
+        "sensor.truenas_data_protection_snapshot_tank_photos_recursive_2_weeks_status": "success",
+        "binary_sensor.truenas_data_protection_snapshot_tank_photos_recursive_2_weeks_problem": STATE_OFF,
+        "sensor.truenas_data_protection_snapshot_tank_photos_recursive_48_hours_status": "hold",
+        "binary_sensor.truenas_data_protection_snapshot_tank_photos_recursive_48_hours_problem": STATE_ON,
+        "sensor.truenas_data_protection_snapshot_tank_vms_1_day_status": "failed",
+        "binary_sensor.truenas_data_protection_snapshot_tank_vms_1_day_problem": STATE_ON,
     }
     for entity_id, state in expected.items():
         assert (s := hass.states.get(entity_id)) is not None, entity_id
@@ -90,19 +92,82 @@ async def test_entities(hass: HomeAssistant, mock_client: AsyncMock, mock_config
     assert memory.attributes["unit_of_measurement"] == "GiB"
     assert float(memory.state) == 24.0
 
-    docs = hass.states.get("sensor.truenas_rsync_mnt_tank_docs_status").attributes
+    docs = hass.states.get("sensor.truenas_data_protection_rsync_mnt_tank_docs_status").attributes
     assert docs["direction"] == "pull"
     assert docs["remote"] == "docs"
     assert docs["error"].startswith("rsync command returned 255")
-    assert hass.states.get("binary_sensor.truenas_snapshot_tank_vms_1_day_problem").attributes["error"] == (
-        "dataset is busy"
-    )
+    assert hass.states.get("binary_sensor.truenas_data_protection_snapshot_tank_vms_1_day_problem").attributes[
+        "error"
+    ] == ("dataset is busy")
     assert (
-        er.async_get(hass).async_get("sensor.truenas_rsync_never_run_status").unique_id == f"{HOST_ID}_rsync_3_status"
+        er.async_get(hass).async_get("sensor.truenas_data_protection_rsync_never_run_status").unique_id
+        == f"{HOST_ID}_rsync_3_status"
     )
 
     # Disabled by default.
     assert er.async_get(hass).async_get("sensor.truenas_cpu_temperature").disabled_by is not None
+
+
+async def test_child_devices(hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry) -> None:
+    await _setup(hass, mock_config_entry)
+    devices = dr.async_get(hass)
+    host = devices.async_get_device({(DOMAIN, HOST_ID)})
+    assert host.name == "truenas"
+
+    children = {d.name: d for d in dr.async_entries_for_config_entry(devices, mock_config_entry.entry_id) if d != host}
+    assert set(children) == {"truenas Pool tank", "truenas Pool backup", "truenas Apps", "truenas Data protection"}
+    assert all(d.via_device_id == host.id for d in children.values())
+
+    entities = er.async_get(hass)
+    for entity_id, device in {
+        "sensor.truenas_cpu_usage": "truenas",
+        "sensor.truenas_pool_tank_usage": "truenas Pool tank",
+        "binary_sensor.truenas_pool_backup_problem": "truenas Pool backup",
+        "sensor.truenas_apps_running": "truenas Apps",
+        "sensor.truenas_apps_plex_state": "truenas Apps",
+        "binary_sensor.truenas_data_protection_snapshot_tank_vms_1_day_problem": "truenas Data protection",
+    }.items():
+        assert devices.async_get(entities.async_get(entity_id).device_id).name == device, entity_id
+
+
+async def test_upgrade_keeps_entity_ids(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    mock_config_entry.add_to_hass(hass)
+    entities = er.async_get(hass)
+    old = entities.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{HOST_ID}_app_plex_state",
+        config_entry=mock_config_entry,
+        suggested_object_id="truenas_app_plex_state",
+    )
+    await _setup(hass, mock_config_entry)
+
+    assert hass.states.get(old.entity_id).state == "running"
+    device = dr.async_get(hass).async_get(entities.async_get(old.entity_id).device_id)
+    assert device.name == "truenas Apps"
+
+
+async def test_remove_stale_pool_device(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    await _setup(hass, mock_config_entry)
+    devices = dr.async_get(hass)
+
+    async def removable(ident: str) -> bool:
+        return await async_remove_config_entry_device(
+            hass, mock_config_entry, devices.async_get_device({(DOMAIN, ident)})
+        )
+
+    assert not await removable(f"{HOST_ID}_pool_backup")
+    assert not await removable(HOST_ID)
+    assert not await removable(f"{HOST_ID}_apps")
+
+    mock_client.pools.return_value = {"tank": mock_client.pools.return_value["tank"]}
+    await _tick(hass)
+    assert await removable(f"{HOST_ID}_pool_backup")
+    assert not await removable(f"{HOST_ID}_pool_tank")
 
 
 async def test_new_and_removed_apps(
@@ -112,8 +177,8 @@ async def test_new_and_removed_apps(
     mock_client.apps.return_value = {"jellyfin": App("jellyfin", "DEPLOYING", "1.0", False)}
     await _tick(hass)
 
-    assert hass.states.get("sensor.truenas_app_jellyfin_state").state == "deploying"
-    assert hass.states.get("sensor.truenas_app_plex_state").state == STATE_UNAVAILABLE
+    assert hass.states.get("sensor.truenas_apps_jellyfin_state").state == "deploying"
+    assert hass.states.get("sensor.truenas_apps_plex_state").state == STATE_UNAVAILABLE
 
 
 async def test_new_and_removed_tasks(
@@ -125,10 +190,12 @@ async def test_new_and_removed_tasks(
     mock_client.rsync_tasks.return_value = {"1": running, "9": replace(tasks["3"], id=9, name="New task")}
     await _tick(hass)
 
-    assert hass.states.get("sensor.truenas_rsync_photos_to_backup_status").state == "running"
-    assert hass.states.get("sensor.truenas_rsync_new_task_status").state == "pending"
-    assert hass.states.get("sensor.truenas_rsync_mnt_tank_docs_status").state == STATE_UNAVAILABLE
-    assert hass.states.get("binary_sensor.truenas_rsync_mnt_tank_docs_problem").state == STATE_UNAVAILABLE
+    assert hass.states.get("sensor.truenas_data_protection_rsync_photos_to_backup_status").state == "running"
+    assert hass.states.get("sensor.truenas_data_protection_rsync_new_task_status").state == "pending"
+    assert hass.states.get("sensor.truenas_data_protection_rsync_mnt_tank_docs_status").state == STATE_UNAVAILABLE
+    assert (
+        hass.states.get("binary_sensor.truenas_data_protection_rsync_mnt_tank_docs_problem").state == STATE_UNAVAILABLE
+    )
 
 
 async def test_alert_events(hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry) -> None:
@@ -221,7 +288,7 @@ async def test_permission_denied_is_partial(
     await _setup(hass, mock_config_entry)
     assert mock_config_entry.state is ConfigEntryState.LOADED
     assert hass.states.get("sensor.truenas_apps_running").state == "0"
-    assert hass.states.get("sensor.truenas_app_plex_state") is None
+    assert hass.states.get("sensor.truenas_apps_plex_state") is None
 
 
 async def test_setup_retry(hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry) -> None:

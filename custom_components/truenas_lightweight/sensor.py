@@ -18,7 +18,15 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import ALERT_LEVELS, TASK_STATES, App, Pool, Task, TrueNASData
 from .coordinator import TrueNASConfigEntry, TrueNASCoordinator
-from .entity import TASK_KINDS, TrueNASEntity, TrueNASTaskEntity, async_track_items, task_items
+from .entity import (
+    TASK_KINDS,
+    TrueNASEntity,
+    TrueNASTaskEntity,
+    apps_device,
+    async_track_items,
+    pool_device,
+    task_items,
+)
 
 POOL_STATUSES = ["online", "degraded", "faulted", "offline", "unavail", "removed"]
 APP_STATES = ["running", "deploying", "stopping", "stopped", "crashed"]
@@ -52,6 +60,8 @@ class TrueNASSensorDescription(SensorEntityDescription):
     attrs_fn: Callable[[TrueNASData], dict[str, Any]] | None = None
     # Realtime stats arrive via subscription and may be briefly missing.
     requires_stats: bool = False
+    # Sits on the Apps child device instead of the host.
+    apps_device: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -171,6 +181,7 @@ SYSTEM_SENSORS: tuple[TrueNASSensorDescription, ...] = (
     TrueNASSensorDescription(
         key="apps_running",
         translation_key="apps_running",
+        apps_device=True,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda d: sum(a.state == "RUNNING" for a in d.apps.values()),
     ),
@@ -268,7 +279,7 @@ class TrueNASSystemSensor(TrueNASEntity, SensorEntity):
     entity_description: TrueNASSensorDescription
 
     def __init__(self, coordinator: TrueNASCoordinator, description: TrueNASSensorDescription) -> None:
-        super().__init__(coordinator, description.key)
+        super().__init__(coordinator, description.key, apps_device(coordinator) if description.apps_device else None)
         self.entity_description = description
 
     @property
@@ -292,10 +303,9 @@ class TrueNASPoolSensor(TrueNASEntity, SensorEntity):
     entity_description: TrueNASPoolSensorDescription
 
     def __init__(self, coordinator: TrueNASCoordinator, description: TrueNASPoolSensorDescription, pool: str) -> None:
-        super().__init__(coordinator, f"pool_{pool}_{description.key}")
+        super().__init__(coordinator, f"pool_{pool}_{description.key}", pool_device(coordinator, pool))
         self.entity_description = description
         self._pool = pool
-        self._attr_translation_placeholders = {"pool": pool}
 
     @property
     def available(self) -> bool:
@@ -310,7 +320,7 @@ class TrueNASAppSensor(TrueNASEntity, SensorEntity):
     entity_description: TrueNASAppSensorDescription
 
     def __init__(self, coordinator: TrueNASCoordinator, description: TrueNASAppSensorDescription, app: str) -> None:
-        super().__init__(coordinator, f"app_{app}_{description.key}")
+        super().__init__(coordinator, f"app_{app}_{description.key}", apps_device(coordinator))
         self.entity_description = description
         self._app = app
         self._attr_translation_placeholders = {"app": app}
