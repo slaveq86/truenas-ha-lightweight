@@ -86,6 +86,14 @@ automation:
           message: "{{ trigger.event.data.message }}"
 ```
 
+## Dashboard
+
+[`examples/dashboard.yaml`](examples/dashboard.yaml) is a ready-made dashboard with health and alerts, CPU/memory/load,
+and compact tables of pools, apps (state, version, updates) and rsync/snapshot tasks that pick up new items
+automatically. The per-pool gauges need the [auto-entities](https://github.com/thomasloven/lovelace-auto-entities) card
+(HACS → Frontend). Host entity ids assume the hostname `truenas`; find/replace `sensor.truenas_` and
+`binary_sensor.truenas_` if yours differs. Paste it via a new dashboard's **Edit → ⋮ → Raw configuration editor**.
+
 ## Creating a read-only API key
 
 1. Create a user (e.g. `homeassistant`) in **Credentials → Users → Add**; no shell, SMB or home directory needed.
