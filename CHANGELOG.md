@@ -8,6 +8,8 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-10-01
+
 ### Added
 
 - Rsync task entities: status, last run time and a problem binary sensor (with the error message) per task.
