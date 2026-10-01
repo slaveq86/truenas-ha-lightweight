@@ -1,14 +1,18 @@
 {
   "domain": "truenas_lightweight",
   "name": "TrueNAS Lightweight",
-  "codeowners": ["@slaveq86"],
+  "codeowners": [
+    "@slaveq86"
+  ],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/slaveq86/truenas-ha-lightweight",
   "integration_type": "device",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/slaveq86/truenas-ha-lightweight/issues",
-  "loggers": ["custom_components.truenas_lightweight"],
+  "loggers": [
+    "custom_components.truenas_lightweight"
+  ],
   "requirements": [],
   "version": "0.0.1"
 }

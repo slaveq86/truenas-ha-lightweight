@@ -8,6 +8,8 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
 
 ## [Unreleased]
 
+## [0.0.1] - 2026-10-01
+
 ### Added
 
 - Read-only TrueNAS integration over the JSON-RPC 2.0 WebSocket API (`wss://<host>/api/current`, TrueNAS 25.04+),
