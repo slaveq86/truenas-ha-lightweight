@@ -11,7 +11,7 @@
           "api_key": "API key"
         },
         "data_description": {
-          "host": "Hostname or IP address of your TrueNAS.",
+          "host": "Hostname or IP address of your TrueNAS. A pasted URL also works; a port in it overrides the Port field.",
           "port": "HTTPS port of the TrueNAS web UI.",
           "verify_ssl": "Disable for the default self-signed certificate."
         }
@@ -27,6 +27,7 @@
     "error": {
       "cannot_connect": "Failed to connect. Check host, port and SSL settings.",
       "invalid_auth": "The API key was rejected.",
+      "invalid_host": "Enter a hostname, IP address or URL of your TrueNAS.",
       "insufficient_permissions": "The API key's user lacks the permissions needed (assign the Read-Only Admin role).",
       "unknown": "Unexpected error."
     },

@@ -35,14 +35,14 @@ class SystemInfo:
         uptime = data.get("uptime_seconds")
         boot_time = _parse_date(data.get("boottime"))
         if boot_time is None and uptime is not None:
-            # Round so the timestamp doesn't drift between polls.
-            boot = datetime.now(UTC) - timedelta(seconds=uptime)
-            boot_time = boot.replace(second=0, microsecond=0)
+            # Jitters by poll latency; the coordinator keeps the previous value stable.
+            boot_time = (datetime.now(UTC) - timedelta(seconds=uptime)).replace(microsecond=0)
         loadavg = data.get("loadavg")
         return cls(
             hostname=data.get("hostname") or "TrueNAS",
             version=data.get("version") or "unknown",
-            model=data.get("system_product") or data.get("model"),
+            # "model" in system.info is the CPU model, not the hardware.
+            model=data.get("system_product"),
             cores=data.get("cores"),
             physmem=data.get("physmem"),
             uptime_seconds=uptime,

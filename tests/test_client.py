@@ -18,6 +18,7 @@ from custom_components.truenas_lightweight.api import (
     TrueNASError,
     TrueNASPermissionError,
 )
+from custom_components.truenas_lightweight.api.models import SystemInfo
 
 from .conftest import load_fixture
 
@@ -30,6 +31,8 @@ class FakeTrueNAS:
     def __init__(self) -> None:
         self.calls: list[str] = []
         self.denied: set[str] = set()
+        self.login_delay = 0.0
+        self.login_started = asyncio.Event()
         self.responses: dict[str, Any] = {
             "system.info": load_fixture("system_info.json"),
             "system.host_id": "hostid",
@@ -47,6 +50,8 @@ class FakeTrueNAS:
             method, params, msg_id = req["method"], req["params"], req["id"]
             self.calls.append(method)
             if method == "auth.login_with_api_key":
+                self.login_started.set()
+                await asyncio.sleep(self.login_delay)
                 authenticated = params == [VALID_KEY]
                 await ws.send_json({"jsonrpc": "2.0", "id": msg_id, "result": authenticated})
             elif not authenticated:
@@ -130,6 +135,26 @@ async def test_default_url_is_wss(session: aiohttp.ClientSession) -> None:
     assert client.url == "wss://nas.local:8443/api/current"
 
 
+async def test_ipv6_url(session: aiohttp.ClientSession) -> None:
+    client = TrueNASClient(session, "fd00::10", "key")
+    assert client.url == "wss://[fd00::10]:443/api/current"
+
+
+async def test_not_connected_until_logged_in(fake: tuple[FakeTrueNAS, str], session: aiohttp.ClientSession) -> None:
+    """A call arriving while login is in flight must wait instead of going out unauthenticated."""
+    server, url = fake
+    server.login_delay = 0.2
+    client = TrueNASClient(session, "unused", VALID_KEY, ws_url=url)
+    connecting = asyncio.create_task(client.connect())
+    await server.login_started.wait()
+    assert not client.connected
+
+    assert (await client.host_id()) == "hostid"
+    await connecting
+    assert server.calls.count("auth.login_with_api_key") == 1
+    await client.close()
+
+
 async def test_invalid_key(fake: tuple[FakeTrueNAS, str], session: aiohttp.ClientSession) -> None:
     _, url = fake
     client = TrueNASClient(session, "unused", "bad", ws_url=url)
@@ -174,3 +199,10 @@ async def test_reconnects_after_drop(fake: tuple[FakeTrueNAS, str], session: aio
     assert (await client.host_id()) == "hostid"
     assert server.calls.count("auth.login_with_api_key") == 2
     await client.close()
+
+
+def test_model_ignores_cpu_model() -> None:
+    """system.info "model" is the CPU; only system_product describes the hardware."""
+    info = SystemInfo.from_api({"model": "AMD Ryzen 5 5600G"})
+    assert info.model is None
+    assert SystemInfo.from_api({"model": "AMD", "system_product": "TRUENAS-MINI-3.0-X+"}).model == "TRUENAS-MINI-3.0-X+"

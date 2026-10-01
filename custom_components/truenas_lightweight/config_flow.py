@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import suppress
+from ipaddress import ip_address
 from typing import Any
+from urllib.parse import urlsplit
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
@@ -34,12 +37,19 @@ USER_SCHEMA = vol.Schema(
 REAUTH_SCHEMA = vol.Schema({vol.Required(CONF_API_KEY): str})
 
 
-def _normalize_host(host: str) -> str:
-    """Accept pasted URLs like https://nas.local/ui and keep only the host."""
-    host = host.strip()
-    if "://" in host:
-        host = host.split("://", 1)[1]
-    return host.split("/", 1)[0]
+def _split_host(value: str) -> tuple[str, int | None]:
+    """Accept a host, host:port or pasted URL (e.g. https://nas.local:8443/ui).
+
+    Returns the bare host (IPv6 without brackets) and the port if one was given.
+    Raises ValueError for unparsable input.
+    """
+    value = value.strip()
+    with suppress(ValueError):
+        return str(ip_address(value)), None  # bare IP, incl. unbracketed IPv6
+    parts = urlsplit(value if "://" in value else f"//{value}")
+    if not parts.hostname:
+        raise ValueError(value)
+    return parts.hostname, parts.port
 
 
 async def _validate(hass: HomeAssistant, data: Mapping[str, Any]) -> tuple[str, str]:
@@ -67,11 +77,20 @@ class TrueNASConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            user_input[CONF_HOST] = _normalize_host(user_input[CONF_HOST])
-            host_id, hostname, errors = await self._try_validate(user_input)
+            try:
+                host, port = _split_host(user_input[CONF_HOST])
+            except ValueError:
+                errors = {CONF_HOST: "invalid_host"}
+            else:
+                user_input[CONF_HOST] = host
+                if port is not None:
+                    user_input[CONF_PORT] = port
+                host_id, hostname, errors = await self._try_validate(user_input)
             if not errors:
                 await self.async_set_unique_id(host_id)
-                self._abort_if_unique_id_configured(updates={CONF_HOST: user_input[CONF_HOST]})
+                self._abort_if_unique_id_configured(
+                    updates={CONF_HOST: user_input[CONF_HOST], CONF_PORT: user_input[CONF_PORT]}
+                )
                 return self.async_create_entry(title=hostname, data=user_input)
 
         return self.async_show_form(

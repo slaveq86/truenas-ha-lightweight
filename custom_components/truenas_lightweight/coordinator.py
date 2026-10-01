@@ -12,6 +12,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
+    SystemInfo,
     TrueNASAuthError,
     TrueNASClient,
     TrueNASData,
@@ -19,6 +20,8 @@ from .api import (
     TrueNASPermissionError,
 )
 from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN, LOGGER
+
+BOOT_TIME_TOLERANCE = timedelta(minutes=2)
 
 type TrueNASConfigEntry = ConfigEntry[TrueNASCoordinator]
 
@@ -52,6 +55,7 @@ class TrueNASCoordinator(DataUpdateCoordinator[TrueNASData]):
         except TrueNASError as err:
             raise UpdateFailed(str(err)) from err
 
+        self._stabilize_boot_time(system)
         return TrueNASData(
             system=system,
             stats=self.client.realtime_stats(),
@@ -59,6 +63,16 @@ class TrueNASCoordinator(DataUpdateCoordinator[TrueNASData]):
             pools=pools,
             apps=apps,
         )
+
+    def _stabilize_boot_time(self, system: SystemInfo) -> None:
+        """Keep the previous boot time unless it moved more than poll jitter (i.e. a reboot)."""
+        previous = self.data.system.boot_time if self.data else None
+        if (
+            previous is not None
+            and system.boot_time is not None
+            and abs(system.boot_time - previous) < BOOT_TIME_TOLERANCE
+        ):
+            system.boot_time = previous
 
     async def _optional[T](self, method: str, fetch: Callable[[], Awaitable[T]], default: T) -> T:
         """Fetch data the key's role may not cover without failing the whole update."""

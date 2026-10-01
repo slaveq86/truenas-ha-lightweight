@@ -10,6 +10,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from yarl import URL
 
 from .api import TrueNASData
 from .const import DOMAIN
@@ -32,7 +33,7 @@ class TrueNASEntity(CoordinatorEntity[TrueNASCoordinator]):
             manufacturer="iXsystems",
             model=system.model or "TrueNAS",
             sw_version=system.version,
-            configuration_url=f"https://{entry.data[CONF_HOST]}:{entry.data[CONF_PORT]}",
+            configuration_url=str(URL.build(scheme="https", host=entry.data[CONF_HOST], port=entry.data[CONF_PORT])),
         )
 
 

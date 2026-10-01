@@ -59,7 +59,7 @@ Copy `custom_components/truenas_lightweight` into your Home Assistant `config/cu
 
 | Field | Default | |
 |---|---|---|
-| Host | — | hostname or IP (a pasted URL is fine) |
+| Host | — | hostname or IP; a pasted URL is fine and its port overrides *Port* |
 | Port | 443 | HTTPS port of the web UI |
 | Verify SSL certificate | on | turn off for self-signed certs |
 | API key | — | key of the read-only user |

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.config_entries import SOURCE_USER
-from homeassistant.const import CONF_API_KEY, CONF_HOST
+from homeassistant.const import CONF_API_KEY, CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -40,6 +40,35 @@ async def test_user_flow(hass: HomeAssistant, mock_client: AsyncMock) -> None:
     assert result["data"] == ENTRY_DATA
     assert result["result"].unique_id == HOST_ID
     mock_client.close.assert_awaited()
+
+
+@pytest.mark.parametrize(
+    ("host_input", "host", "port"),
+    [
+        ("https://truenas.local:8443/ui", "truenas.local", 8443),
+        ("truenas.local:8443", "truenas.local", 8443),
+        ("[fd00::10]:8443", "fd00::10", 8443),
+        ("fd00::10", "fd00::10", 443),
+        (" 192.168.1.5 ", "192.168.1.5", 443),
+    ],
+)
+async def test_user_flow_host_parsing(
+    hass: HomeAssistant, mock_client: AsyncMock, host_input: str, host: str, port: int
+) -> None:
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {**ENTRY_DATA, CONF_HOST: host_input})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_HOST] == host
+    assert result["data"][CONF_PORT] == port
+
+
+@pytest.mark.parametrize("host_input", ["https://", "nas.local:notaport", "nas.local:99999"])
+async def test_user_flow_invalid_host(hass: HomeAssistant, mock_client: AsyncMock, host_input: str) -> None:
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {**ENTRY_DATA, CONF_HOST: host_input})
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {CONF_HOST: "invalid_host"}
+    mock_client.host_id.assert_not_called()
 
 
 @pytest.mark.parametrize(

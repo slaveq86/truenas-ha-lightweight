@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import timedelta
 from unittest.mock import AsyncMock
 
@@ -81,6 +82,24 @@ async def test_new_and_removed_apps(
 
     assert hass.states.get("sensor.truenas_app_jellyfin_state").state == "deploying"
     assert hass.states.get("sensor.truenas_app_plex_state").state == STATE_UNAVAILABLE
+
+
+async def test_boot_time_stable_until_reboot(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    await _setup(hass, mock_config_entry)
+    original = mock_client.system_info.return_value
+    state = hass.states.get("sensor.truenas_last_boot").state
+
+    # Poll jitter (computed from uptime) must not move the timestamp.
+    mock_client.system_info.return_value = replace(original, boot_time=original.boot_time + timedelta(seconds=61))
+    await _tick(hass)
+    assert hass.states.get("sensor.truenas_last_boot").state == state
+
+    # A real reboot does.
+    mock_client.system_info.return_value = replace(original, boot_time=original.boot_time + timedelta(days=3))
+    await _tick(hass)
+    assert hass.states.get("sensor.truenas_last_boot").state == "2025-10-04T00:00:00+00:00"
 
 
 async def test_missing_realtime_stats(

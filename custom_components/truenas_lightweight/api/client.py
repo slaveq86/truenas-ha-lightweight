@@ -48,9 +48,12 @@ class TrueNASClient:
         self._api_key = api_key
         self._timeout = timeout
         self._subscribe_realtime = subscribe_realtime
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"  # IPv6 literal
         self.url = ws_url or f"wss://{host}:{port}{API_PATH}"
 
         self._ws: aiohttp.ClientWebSocketResponse | None = None
+        self._authenticated = False
         self._reader: asyncio.Task[None] | None = None
         self._ids = itertools.count(1)
         self._pending: dict[int, asyncio.Future[Any]] = {}
@@ -60,7 +63,8 @@ class TrueNASClient:
 
     @property
     def connected(self) -> bool:
-        return self._ws is not None and not self._ws.closed
+        """True once the socket is open *and* login succeeded."""
+        return self._authenticated and self._ws is not None and not self._ws.closed
 
     async def connect(self) -> None:
         """Open the socket, authenticate and (optionally) subscribe to realtime stats."""
@@ -77,6 +81,7 @@ class TrueNASClient:
             try:
                 if not await self._call("auth.login_with_api_key", [self._api_key]):
                     raise TrueNASAuthError("API key rejected")
+                self._authenticated = True
                 if self._subscribe_realtime:
                     try:
                         await self._call("core.subscribe", [REALTIME_COLLECTION])
@@ -177,6 +182,7 @@ class TrueNASClient:
                 self._realtime_at = time.monotonic()
 
     async def _close_socket(self) -> None:
+        self._authenticated = False
         if self._ws is not None:
             await self._ws.close()
         if self._reader is not None:

@@ -1,0 +1,21 @@
+# api/ – TrueNAS JSON-RPC client
+
+Must stay **independent of Home Assistant** (no `homeassistant` imports) so it could be split into a PyPI library later.
+
+## Protocol
+- Endpoint `wss://{host}:{port}/api/current` (TrueNAS 25.04+). `ws_url=` constructor arg exists only for tests.
+- JSON-RPC 2.0 requests `{"jsonrpc","id","method","params": [...]}`; params are always a positional list.
+- Login: `auth.login_with_api_key [key]` → `true`/`false`.
+- Datetimes arrive as `{"$date": epoch_ms}` — parse with `models._parse_date`.
+- Errors: `error.data.errname` → `ENOTAUTHENTICATED` = `TrueNASAuthError`, `EACCES` = `TrueNASPermissionError`, anything else `TrueNASError`. Transport failures/timeouts = `TrueNASConnectionError`.
+- Push events: `core.subscribe ["reporting.realtime"]`; server sends `method: "collection_update"` with `params.fields` (cpu/memory). Cached in the client, read via `realtime_stats()`, considered stale after 60 s.
+
+## Client design (`client.py`)
+- One persistent socket; `_read_loop` task resolves futures in `_pending` by id and fails all of them when the socket closes.
+- `call()` auto-(re)connects; `connect()` is guarded by `_connect_lock` so concurrent calls share one login.
+- Add new endpoints as typed helpers returning models, never raw dicts.
+
+## Models (`models.py`)
+- Dataclasses with `from_api()` classmethods; parse defensively with `.get()` — field names drift between TrueNAS releases. Only truly required keys (e.g. pool/app `name`) may use `[]`.
+- Enum-like strings are upper-cased here; entities lower-case them.
+- When adding fields, add them to the fixtures in `tests/fixtures/` too.
