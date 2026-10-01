@@ -8,6 +8,8 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-01
+
 ### Added
 
 - Example dashboard (`examples/dashboard.yaml`) covering system, storage, apps and data protection entities.

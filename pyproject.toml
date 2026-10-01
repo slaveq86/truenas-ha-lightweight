@@ -1,6 +1,6 @@
 [project]
 name = "truenas-ha-lightweight"
-version = "0.0.4"
+version = "0.1.0"
 description = "Lightweight read-only TrueNAS integration for Home Assistant"
 requires-python = ">=3.13"
 license = "Apache-2.0"
