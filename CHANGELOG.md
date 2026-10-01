@@ -8,6 +8,10 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-10-01
+
+- Security hardening
+
 ## [0.0.2] - 2026-10-01
 
 ### Added
