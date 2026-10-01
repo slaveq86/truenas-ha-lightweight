@@ -8,6 +8,8 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-01
+
 ### Added
 
 - Disk temperature sensors, one per disk (on its pool's device; boot and unassigned disks on the host), refreshed
