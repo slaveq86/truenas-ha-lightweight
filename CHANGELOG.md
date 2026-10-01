@@ -8,6 +8,12 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-10-01
+
+- ssh keys (#3)
+- Bump actions/setup-python from 6.3.0 to 7.0.0 (#1)
+- Bump actions/checkout from 5.1.0 to 7.0.1 (#2)
+
 ## [0.0.3] - 2026-10-01
 
 - Security hardening
