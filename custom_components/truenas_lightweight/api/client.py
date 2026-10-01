@@ -63,14 +63,22 @@ class TrueNASClient:
 
     @property
     def connected(self) -> bool:
-        """True once the socket is open *and* login succeeded."""
-        return self._authenticated and self._ws is not None and not self._ws.closed
+        """True once the socket is open *and* login succeeded, while its reader is still running."""
+        return (
+            self._authenticated
+            and self._ws is not None
+            and not self._ws.closed
+            and self._reader is not None
+            and not self._reader.done()
+        )
 
     async def connect(self) -> None:
         """Open the socket, authenticate and (optionally) subscribe to realtime stats."""
         async with self._connect_lock:
             if self.connected:
                 return
+            # Drop what is left of a previous connection, e.g. a socket still open after its reader stopped.
+            await self._close_socket()
             try:
                 async with asyncio.timeout(self._timeout):
                     self._ws = await self._session.ws_connect(self.url, heartbeat=30)
@@ -163,16 +171,23 @@ class TrueNASClient:
                         _LOGGER.debug("Ignoring non-JSON message: %s", msg.data)
                 elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
                     break
+        except Exception:
+            # The stopped reader makes `connected` false, so the next call reconnects.
+            _LOGGER.exception("WebSocket reader failed; reconnecting on next call")
         finally:
             for future in self._pending.values():
                 if not future.done():
                     future.set_exception(TrueNASConnectionError("Connection closed"))
             self._pending.clear()
 
-    def _handle(self, msg: dict[str, Any]) -> None:
+    def _handle(self, msg: Any) -> None:
+        # Anything malformed is dropped here: an exception would stop the reader and with it the connection.
+        if not isinstance(msg, dict):
+            _LOGGER.debug("Ignoring non-object message: %s", msg)
+            return
         msg_id = msg.get("id")
         if msg_id is not None:
-            future = self._pending.get(msg_id)
+            future = self._pending.get(msg_id) if isinstance(msg_id, int) else None
             if future is None or future.done():
                 return
             if (error := msg.get("error")) is not None:
@@ -182,9 +197,12 @@ class TrueNASClient:
             return
 
         if msg.get("method") == "collection_update":
-            params = msg.get("params") or {}
-            if params.get("collection") == REALTIME_COLLECTION and params.get("fields"):
-                self._realtime = params["fields"]
+            params = msg.get("params")
+            if not isinstance(params, dict):
+                return
+            fields = params.get("fields")
+            if params.get("collection") == REALTIME_COLLECTION and isinstance(fields, dict) and fields:
+                self._realtime = fields
                 self._realtime_at = time.monotonic()
 
     async def _close_socket(self) -> None:
@@ -198,8 +216,12 @@ class TrueNASClient:
         self._realtime = None
 
 
-def _map_error(error: dict[str, Any]) -> TrueNASError:
-    data = error.get("data") or {}
+def _map_error(error: Any) -> TrueNASError:
+    if not isinstance(error, dict):
+        return TrueNASError(str(error))
+    data = error.get("data")
+    if not isinstance(data, dict):
+        data = {}
     errname = data.get("errname")
     reason = data.get("reason") or error.get("message") or "Unknown error"
     if errname == "ENOTAUTHENTICATED":

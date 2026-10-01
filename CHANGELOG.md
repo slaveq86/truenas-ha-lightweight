@@ -25,6 +25,13 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
   one *Data protection* device for rsync and snapshot tasks. Existing entity ids are kept; app and task friendly
   names now start with the device name (e.g. *truenas Apps plex state*, *truenas Data protection Rsync … status*).
   Devices of deleted pools can be removed from the device page.
+- Diagnostics now also redact pool, app and task names, datasets, rsync remotes, task errors and alert messages,
+  which can contain paths, hostnames, IPs and disk serials.
+
+### Fixed
+
+- A malformed message from TrueNAS no longer leaves the connection stuck with every update timing out until the
+  integration is reloaded; such messages are ignored, and any other reader failure triggers a reconnect.
 
 ## [0.0.1] - 2026-10-01
 

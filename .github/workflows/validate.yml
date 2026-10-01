@@ -8,18 +8,26 @@ on:
     - cron: "0 0 * * 1"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+# hassfest and HACS publish no releases worth tracking, so they are pinned to a commit of their default branch
+# (refresh with `git ls-remote <repo> HEAD`). Both still run a floating Docker image (hassfest:latest,
+# hacs/action:main), which is why these jobs only ever get a read-only token and no secrets.
 jobs:
   hassfest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: home-assistant/actions/hassfest@master
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: home-assistant/actions/hassfest@06749dd8c0b54f350bc69c8752456cee498808a3 # master
 
   hacs:
     # HACS reads files via unauthenticated raw.githubusercontent.com, so it can only validate public repos.
     if: ${{ github.event.repository.visibility == 'public' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: hacs/action@main
+      - uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main
         with:
           category: integration

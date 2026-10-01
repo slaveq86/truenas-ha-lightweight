@@ -12,6 +12,7 @@ Must stay **independent of Home Assistant** (no `homeassistant` imports) so it c
 
 ## Client design (`client.py`)
 - One persistent socket; `_read_loop` task resolves futures in `_pending` by id and fails all of them when the socket closes.
+- `_handle` must never raise: type-check every field of server messages and drop malformed ones. `connected` also requires the reader to be alive, and `connect()` closes any leftover socket first, so a reader that dies anyway leads to a reconnect rather than calls timing out forever.
 - `call()` auto-(re)connects; `connect()` is guarded by `_connect_lock` so concurrent calls share one login.
 - Add new endpoints as typed helpers returning models, never raw dicts.
 

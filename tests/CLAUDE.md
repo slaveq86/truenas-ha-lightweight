@@ -8,7 +8,7 @@ Run with `pytest` (Python 3.13, `pytest-homeassistant-custom-component` pinned i
 - `fixtures/*.json` mirror real TrueNAS 25.04 responses; `reporting_realtime.json` is the `fields` of a `reporting.realtime` event. Keep them realistic — prefer capturing real payloads over inventing fields.
 
 ## Files
-- `test_client.py` – real client against `FakeTrueNAS`, an in-process aiohttp JSON-RPC server on 127.0.0.1 (needs the `socket_enabled` fixture). Extend `FakeTrueNAS.responses` for new methods.
+- `test_client.py` – real client against `FakeTrueNAS`, an in-process aiohttp JSON-RPC server on 127.0.0.1 (needs the `socket_enabled` fixture). Extend `FakeTrueNAS.responses` for new methods; `junk` (frames sent before the next reply) and `raw_errors` (malformed error payloads) exercise the client's handling of bad server messages.
 - `test_config_flow.py` – user/reauth/options flows; `async_setup_entry` is patched out.
 - `test_init.py` – setup, entity states, dynamic pools/apps, coordinator error paths, diagnostics.
 

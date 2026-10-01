@@ -24,7 +24,7 @@ The coordinator diffs active (non-dismissed) alert uuids against `_alert_baselin
 User step validates with `subscribe_realtime=False`, splits host/URL input via `_split_host` (a port in a pasted URL overrides the Port field; IPv6 stored without brackets — the client adds them), unique id = host_id. Reauth replaces only the API key and aborts with `wrong_device` if host_id differs. Options change reloads the entry.
 
 ## Diagnostics
-`diagnostics.py` redacts api_key, host, hostname, title, unique_id, remotehost, path. Redact any new identifying field you add to models.
+`diagnostics.py` redacts api_key, host, hostname, title, unique_id, name, path, dataset, remotehost, remote, error, message, and turns the name-keyed pools/apps/task dicts into lists (redaction only covers values, not keys). Redact any new identifying or free-text field you add to models.
 
 `brand/icon.png` (256×256) and `icon@2x.png` (512×512) are required by HACS validation — a generic NAS icon; never use the TrueNAS/iXsystems logo.
 

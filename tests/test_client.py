@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncGenerator
 from typing import Any
+from unittest.mock import patch
 
 import aiohttp
 import pytest
@@ -33,6 +34,10 @@ class FakeTrueNAS:
         self.denied: set[str] = set()
         self.login_delay = 0.0
         self.login_started = asyncio.Event()
+        # Frames sent ahead of the next reply, then cleared.
+        self.junk: list[Any] = []
+        # Methods answered with this raw (possibly malformed) JSON-RPC "error" value.
+        self.raw_errors: dict[str, Any] = {}
         self.responses: dict[str, Any] = {
             "system.info": load_fixture("system_info.json"),
             "system.host_id": "hostid",
@@ -51,6 +56,9 @@ class FakeTrueNAS:
             req = msg.json()
             method, params, msg_id = req["method"], req["params"], req["id"]
             self.calls.append(method)
+            for frame in self.junk:
+                await ws.send_json(frame)
+            self.junk = []
             if method == "auth.login_with_api_key":
                 self.login_started.set()
                 await asyncio.sleep(self.login_delay)
@@ -60,6 +68,8 @@ class FakeTrueNAS:
                 await ws.send_json(_error(msg_id, "ENOTAUTHENTICATED", "Not authenticated"))
             elif method in self.denied:
                 await ws.send_json(_error(msg_id, "EACCES", "Not authorized"))
+            elif method in self.raw_errors:
+                await ws.send_json({"jsonrpc": "2.0", "id": msg_id, "error": self.raw_errors[method]})
             elif method == "core.subscribe":
                 await ws.send_json({"jsonrpc": "2.0", "id": msg_id, "result": "sub-1"})
                 await ws.send_json(
@@ -207,6 +217,50 @@ async def test_reconnects_after_drop(fake: tuple[FakeTrueNAS, str], session: aio
 
     assert (await client.host_id()) == "hostid"
     assert server.calls.count("auth.login_with_api_key") == 2
+    await client.close()
+
+
+async def test_ignores_malformed_messages(fake: tuple[FakeTrueNAS, str], session: aiohttp.ClientSession) -> None:
+    """Malformed frames must not stop the reader, which would leave every later call to time out."""
+    server, url = fake
+    client = TrueNASClient(session, "unused", VALID_KEY, ws_url=url, timeout=2)
+    await client.connect()
+    stats = client.realtime_stats()
+    server.junk = [
+        [],
+        "text",
+        {"jsonrpc": "2.0", "id": [1], "result": "unhashable id"},
+        {"jsonrpc": "2.0", "method": "collection_update", "params": ["reporting.realtime"]},
+        {"jsonrpc": "2.0", "method": "collection_update", "params": {"collection": "reporting.realtime", "fields": 1}},
+    ]
+    server.raw_errors = {"system.info": "boom", "app.query": {"message": "bad", "data": "not a dict"}}
+
+    assert (await client.host_id()) == "hostid"
+    with pytest.raises(TrueNASError, match="boom"):
+        await client.system_info()
+    with pytest.raises(TrueNASError, match="bad"):
+        await client.apps()
+    assert client.connected
+    assert client.realtime_stats() == stats
+    assert server.calls.count("auth.login_with_api_key") == 1
+    await client.close()
+
+
+async def test_reconnects_after_reader_failure(fake: tuple[FakeTrueNAS, str], session: aiohttp.ClientSession) -> None:
+    """If the reader dies anyway, the still-open socket is dropped and the next call reconnects."""
+    server, url = fake
+    client = TrueNASClient(session, "unused", VALID_KEY, ws_url=url, timeout=2)
+    await client.connect()
+    old_ws = client._ws
+    assert old_ws is not None
+
+    with patch.object(client, "_handle", side_effect=RuntimeError("bug")), pytest.raises(TrueNASConnectionError):
+        await client.host_id()
+    assert not client.connected
+
+    assert (await client.host_id()) == "hostid"
+    assert server.calls.count("auth.login_with_api_key") == 2
+    assert old_ws.closed
     await client.close()
 
 

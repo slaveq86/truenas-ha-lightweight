@@ -11,14 +11,29 @@ from homeassistant.core import HomeAssistant
 
 from .coordinator import TrueNASConfigEntry
 
-TO_REDACT = {CONF_API_KEY, CONF_HOST, "hostname", "title", "unique_id", "remotehost", "path"}
+# Pool/app/task names, datasets and remote targets identify the setup; TrueNAS also writes hostnames, IPs, paths
+# and disk serials into free-text task errors and alert messages.
+TO_REDACT = {
+    CONF_API_KEY,
+    CONF_HOST,
+    "hostname",
+    "title",
+    "unique_id",
+    "name",
+    "path",
+    "dataset",
+    "remotehost",
+    "remote",
+    "error",
+    "message",
+}
+
+# async_redact_data only redacts values, and these are keyed by pool/app name (tasks by id).
+KEYED_BY_NAME = ("pools", "apps", "rsync_tasks", "snapshot_tasks")
 
 
 async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: TrueNASConfigEntry) -> dict[str, Any]:
-    return async_redact_data(
-        {
-            "entry": entry.as_dict(),
-            "data": asdict(entry.runtime_data.data),
-        },
-        TO_REDACT,
-    )
+    data = asdict(entry.runtime_data.data)
+    for key in KEYED_BY_NAME:
+        data[key] = list(data[key].values())
+    return async_redact_data({"entry": entry.as_dict(), "data": data}, TO_REDACT)

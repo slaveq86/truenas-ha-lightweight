@@ -324,6 +324,12 @@ async def test_diagnostics_redacts(
     assert diag["entry"]["data"]["api_key"] == "**REDACTED**"
     assert diag["entry"]["data"]["host"] == "**REDACTED**"
     assert diag["data"]["system"]["hostname"] == "**REDACTED**"
-    assert diag["data"]["rsync_tasks"]["1"]["details"]["remotehost"] == "**REDACTED**"
-    assert "backup.lan" not in str(diag)
-    assert "1-secretkey" not in str(diag)
+    rsync = diag["data"]["rsync_tasks"][0]
+    assert rsync["details"]["remotehost"] == "**REDACTED**"
+    # Non-identifying fields stay readable.
+    assert rsync["state"] == "SUCCESS"
+    assert diag["data"]["pools"][0]["status"] == "ONLINE"
+    # Pool names (also dict keys), datasets, task names derived from paths, remotes and free text are all gone.
+    text = str(diag)
+    for secret in ("1-secretkey", "backup.lan", "nas2.lan", "/srv/photos", "/mnt/tank", "tank", "photos", "plex"):
+        assert secret not in text, secret
