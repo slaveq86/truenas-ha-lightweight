@@ -46,6 +46,8 @@ class FakeTrueNAS:
             "app.query": load_fixture("app_query.json"),
             "rsynctask.query": load_fixture("rsynctask_query.json"),
             "pool.snapshottask.query": load_fixture("snapshottask_query.json"),
+            "disk.query": load_fixture("disk_query.json"),
+            "disk.temperatures": load_fixture("disk_temperatures.json"),
         }
 
     async def handler(self, request: web.Request) -> web.WebSocketResponse:
@@ -121,13 +123,15 @@ async def test_fetch_all(fake: tuple[FakeTrueNAS, str], session: aiohttp.ClientS
     server, url = fake
     client = TrueNASClient(session, "unused", VALID_KEY, ws_url=url)
 
-    info, pools, apps, alerts, rsync, snapshots = await asyncio.gather(
+    info, pools, apps, alerts, rsync, snapshots, disks, temps = await asyncio.gather(
         client.system_info(),
         client.pools(),
         client.apps(),
         client.alerts(),
         client.rsync_tasks(),
         client.snapshot_tasks(),
+        client.disks(),
+        client.disk_temperatures(),
     )
 
     assert info.hostname == "truenas"
@@ -138,6 +142,12 @@ async def test_fetch_all(fake: tuple[FakeTrueNAS, str], session: aiohttp.ClientS
     assert [a.dismissed for a in alerts] == [False, False, True]
     assert {k: t.state for k, t in rsync.items()} == {"1": "SUCCESS", "2": "FAILED", "3": "PENDING"}
     assert {k: t.state for k, t in snapshots.items()} == {"1": "SUCCESS", "2": "FAILED", "3": "HOLD"}
+    # Keyed by serial; a disk without one falls back to its identifier.
+    assert disks["WD-WCC7K1ABCDEF"].pool == "tank"
+    assert disks["{devicename}sdd"].serial is None
+    assert disks["S4EWNX0R123456"].type == "SSD"
+    # Disks that can't report a temperature (null) are dropped.
+    assert temps == {"sda": 34, "sdb": 36, "sdc": 52, "nvme0n1": 45}
     # Concurrent calls must share a single login.
     assert server.calls.count("auth.login_with_api_key") == 1
 
@@ -147,6 +157,20 @@ async def test_fetch_all(fake: tuple[FakeTrueNAS, str], session: aiohttp.ClientS
     assert stats.mem_used_pct == 75.0
     await client.close()
     assert not client.connected
+
+
+async def test_disks_sharing_a_serial(fake: tuple[FakeTrueNAS, str], session: aiohttp.ClientSession) -> None:
+    server, url = fake
+    bridge = {"serial": "000000000001", "identifier": "{serial}000000000001", "model": "USB3.0 bridge"}
+    server.responses["disk.query"] = [
+        *load_fixture("disk_query.json")[:1],
+        {"name": "sde", **bridge},
+        {"name": "sdf", **bridge},
+    ]
+    client = TrueNASClient(session, "unused", VALID_KEY, ws_url=url)
+    disks = await client.disks()
+    assert set(disks) == {"WD-WCC7K1ABCDEF", "000000000001_sde", "000000000001_sdf"}
+    await client.close()
 
 
 async def test_default_url_is_wss(session: aiohttp.ClientSession) -> None:

@@ -181,6 +181,37 @@ class App:
 
 
 @dataclass(slots=True)
+class Disk:
+    """An entry from disk.query, with its temperature from disk.temperatures merged in."""
+
+    name: str
+    identifier: str | None
+    serial: str | None
+    model: str | None
+    type: str | None
+    size: int | None
+    pool: str | None
+    temperature: float | None = None
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> Disk:
+        return cls(
+            name=data["name"],
+            identifier=data.get("identifier") or None,
+            serial=(data.get("serial") or "").strip() or None,
+            model=(data.get("model") or "").strip() or None,
+            type=(data.get("type") or "").upper() or None,
+            size=data.get("size"),
+            pool=data.get("pool") or None,
+        )
+
+    @property
+    def key(self) -> str:
+        """Stable id: kernel names (sda, ...) can change between boots, serials don't."""
+        return self.serial or self.identifier or self.name
+
+
+@dataclass(slots=True)
 class Task:
     """A data protection task (rsync, periodic snapshot) and the outcome of its last run."""
 
@@ -264,6 +295,7 @@ class TrueNASData:
     apps: dict[str, App] = field(default_factory=dict)
     rsync_tasks: dict[str, Task] = field(default_factory=dict)
     snapshot_tasks: dict[str, Task] = field(default_factory=dict)
+    disks: dict[str, Disk] = field(default_factory=dict)
 
     @property
     def active_alerts(self) -> list[Alert]:

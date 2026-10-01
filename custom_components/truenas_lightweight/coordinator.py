@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
 
@@ -13,6 +14,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import (
     Alert,
+    Disk,
     SystemInfo,
     TrueNASAuthError,
     TrueNASClient,
@@ -20,7 +22,7 @@ from .api import (
     TrueNASError,
     TrueNASPermissionError,
 )
-from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN, EVENT_ALERT, LOGGER
+from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DISK_INTERVAL, DOMAIN, EVENT_ALERT, LOGGER
 
 BOOT_TIME_TOLERANCE = timedelta(minutes=2)
 
@@ -44,10 +46,14 @@ class TrueNASCoordinator(DataUpdateCoordinator[TrueNASData]):
         self._denied: set[str] = set()
         # Active alerts by uuid from the last successful alert.list; None until known (startup, denied).
         self._alert_baseline: dict[str, Alert] | None = None
+        self._disks: dict[str, Disk] = {}
+        # time.monotonic() of the last disk fetch attempt; wall-clock jumps must not stall the refresh.
+        self._disks_at: float | None = None
+        self._disk_errors: set[str] = set()
 
     async def _async_update_data(self) -> TrueNASData:
         try:
-            system, alerts, pools, apps, rsync_tasks, snapshot_tasks = await asyncio.gather(
+            system, alerts, pools, apps, rsync_tasks, snapshot_tasks, disks = await asyncio.gather(
                 self.client.system_info(),
                 # None (not []) when denied, so a denial isn't mistaken for every alert clearing.
                 self._optional("alert.list", self.client.alerts, None),
@@ -55,6 +61,7 @@ class TrueNASCoordinator(DataUpdateCoordinator[TrueNASData]):
                 self._optional("app.query", self.client.apps, {}),
                 self._optional("rsynctask.query", self.client.rsync_tasks, {}),
                 self._optional("pool.snapshottask.query", self.client.snapshot_tasks, {}),
+                self._fetch_disks(),
             )
         except TrueNASAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
@@ -71,7 +78,43 @@ class TrueNASCoordinator(DataUpdateCoordinator[TrueNASData]):
             apps=apps,
             rsync_tasks=rsync_tasks,
             snapshot_tasks=snapshot_tasks,
+            disks=disks,
         )
+
+    async def _fetch_disks(self) -> dict[str, Disk]:
+        """Disks with their temperatures, refreshed at most every DISK_INTERVAL.
+
+        Best effort: a failing source (e.g. disk.temperatures timing out on slow SMART reads) must neither fail the
+        whole update nor be retried every scan, so the attempt time is recorded before fetching.
+        """
+        now = time.monotonic()
+        if self._disks_at is not None and now - self._disks_at < DISK_INTERVAL.total_seconds():
+            return self._disks
+        self._disks_at = now
+        disks, temperatures = await asyncio.gather(
+            self._best_effort("disk.query", self.client.disks),
+            self._best_effort("disk.temperatures", self.client.disk_temperatures),
+        )
+        # Keep the known disks if disk.query failed, so their entities don't flap to unavailable.
+        disks = self._disks if disks is None else disks
+        for disk in disks.values():
+            disk.temperature = (temperatures or {}).get(disk.name)
+        self._disks = disks
+        return disks
+
+    async def _best_effort[T](self, method: str, fetch: Callable[[], Awaitable[T]]) -> T | None:
+        """Like `_optional`, but any non-auth error also yields None (logged once until the call succeeds again)."""
+        try:
+            result = await self._optional(method, fetch, None)
+        except TrueNASAuthError:
+            raise
+        except TrueNASError as err:
+            if method not in self._disk_errors:
+                self._disk_errors.add(method)
+                LOGGER.warning("Calling %s failed, retrying every %s: %s", method, DISK_INTERVAL, err)
+            return None
+        self._disk_errors.discard(method)
+        return result
 
     def _track_alerts(self, alerts: list[Alert] | None, system: SystemInfo) -> None:
         """Fire EVENT_ALERT for alerts raised/cleared since the last known state.

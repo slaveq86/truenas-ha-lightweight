@@ -8,6 +8,12 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
 
 ## [Unreleased]
 
+### Added
+
+- Disk temperature sensors, one per disk (on its pool's device; boot and unassigned disks on the host), refreshed
+  every 5 minutes so polling doesn't keep HDDs from spinning down.
+- Disks table and disk temperature graph in the example dashboard.
+
 ## [0.1.0] - 2026-10-01
 
 ### Added

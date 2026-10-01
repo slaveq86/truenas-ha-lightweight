@@ -145,6 +145,9 @@
       "pool_free": {
         "name": "Free space"
       },
+      "disk_temperature": {
+        "name": "Disk {disk} temperature"
+      },
       "app_state": {
         "name": "{app} state",
         "state": {

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 DOMAIN = "truenas_lightweight"
 LOGGER = logging.getLogger(__package__)
@@ -16,3 +17,7 @@ DEFAULT_PORT = 443
 DEFAULT_SCAN_INTERVAL = 30
 MIN_SCAN_INTERVAL = 10
 MAX_SCAN_INTERVAL = 600
+
+# disk.temperatures reads every disk's sensor (SMART/drivetemp); polling it each scan is wasteful and can keep HDDs
+# from spinning down, so disks are refreshed on this slower cadence.
+DISK_INTERVAL = timedelta(minutes=5)

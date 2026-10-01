@@ -2,9 +2,10 @@
 #
 # Requirements:
 #   - auto-entities (HACS → Frontend → "auto-entities") — draws a usage gauge per pool
-#     and shows the optional CPU temperature / ARC sensors. Pools, apps and tasks
-#     tables are plain markdown cards that discover entities by device, so nothing
-#     below depends on pool, app or task names.
+#     and a disk temperature graph, and shows the optional CPU temperature / ARC
+#     sensors. Pools, disks, apps and tasks tables are plain markdown cards that
+#     discover entities by device or attribute, so nothing below depends on pool,
+#     disk, app or task names.
 #
 # Entity ids of the host assume the TrueNAS hostname "truenas"
 # (e.g. sensor.truenas_cpu_usage). If yours differs, find/replace "sensor.truenas_"
@@ -200,6 +201,48 @@ views:
               {%- else %}
               No pools found.
               {%- endif %}
+
+      # ── Disks ───────────────────────────────────────────────────────────────
+      # Disk temperature sensors are found by their "disk" attribute, so this works
+      # whichever device (pool or host) a disk sits on. Temperatures refresh every 5 min.
+      - type: grid
+        cards:
+          - type: heading
+            heading: Disks
+            icon: mdi:harddisk
+          - type: markdown
+            content: |
+              {%- set ns = namespace(rows=[]) %}
+              {%- for e in integration_entities('truenas_lightweight') | select('is_state_attr', 'device_class', 'temperature') %}
+              {%- if state_attr(e, 'disk') and not is_state(e, 'unavailable') %}
+              {%- set ns.rows = ns.rows + [{'e': e, 'disk': state_attr(e, 'disk'), 'pool': state_attr(e, 'pool') or '—'}] %}
+              {%- endif %}
+              {%- endfor %}
+              {%- if ns.rows %}
+              | | Disk | Model | Pool | Temp |
+              |:-:|:--|:--|:--|--:|
+              {%- for r in ns.rows | sort(attribute='disk') | sort(attribute='pool') %}
+              {%- set t = states(r.e) | float(none) %}
+              {#- SSDs/NVMe run hotter than spinning disks. #}
+              {%- set warm, hot = (50, 70) if state_attr(r.e, 'type') == 'SSD' else (40, 50) %}
+              {%- set icon = '❔' if t is none else '🟢' if t < warm else '🟡' if t < hot else '🔴' %}
+              | {{ icon }} | **{{ r.disk }}** | {{ (state_attr(r.e, 'model') or '—') | replace('|', '/') }} | {{ r.pool }} | {{ states(r.e, rounded=True, with_unit=True) if t is not none else '—' }} |
+              {%- endfor %}
+              {%- else %}
+              No disks found.
+              {%- endif %}
+          - type: custom:auto-entities
+            show_empty: false
+            card:
+              type: history-graph
+              title: Disk temperatures
+              hours_to_show: 24
+            filter:
+              include:
+                - integration: truenas_lightweight
+                  entity_id: sensor.*_disk_*_temperature
+            sort:
+              method: name
 
       # ── Apps ────────────────────────────────────────────────────────────────
       - type: grid
