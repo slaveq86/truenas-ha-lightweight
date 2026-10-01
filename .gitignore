@@ -16,3 +16,4 @@ htmlcov/
 # Dev Home Assistant config (keep only configuration.yaml)
 config/*
 !config/configuration.yaml
+release_notes.md

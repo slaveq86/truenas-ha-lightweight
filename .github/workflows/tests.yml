@@ -1,9 +1,9 @@
 name: Tests
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  # Pushes to main are tested by release.yml before releasing.
+  workflow_call:
 
 jobs:
   test:

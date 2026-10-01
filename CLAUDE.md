@@ -6,8 +6,8 @@ Read-only Home Assistant custom integration (domain `truenas_lightweight`) for T
 - `custom_components/truenas_lightweight/` – the integration (see its CLAUDE.md)
   - `api/` – HA-agnostic WebSocket client + models (see its CLAUDE.md)
 - `tests/` – pytest-homeassistant-custom-component tests (see its CLAUDE.md)
-- `scripts/` – `setup`, `lint`, `develop` (runs HA on :8123 with `config/`)
-- `.github/workflows/` – hassfest + HACS validation, ruff + pytest
+- `scripts/` – `setup`, `lint`, `develop` (runs HA on :8123 with `config/`), `release.py` (used by CI)
+- `.github/workflows/` – `validate.yml` (hassfest + HACS), `tests.yml` (ruff + pytest, PRs and reused by release), `release.yml`
 
 ## Commands
 ```bash
@@ -24,4 +24,6 @@ scripts/develop        # local HA instance for manual testing
 - `hacs.json` accepts only HACS's documented keys (`name`, `homeassistant`, `country`, `hacs`, `zip_release`, `filename`, `content_in_root`, `hide_default_branch`, `persistent_directory`) — anything else (e.g. old `render_readme`) fails validation.
 - Minimum Home Assistant: 2025.2 (`hacs.json`). Don't use newer HA APIs without bumping it.
 - Line length 120; ruff config in `pyproject.toml`. Keep `strings.json` and `translations/en.json` identical.
-- Manifest `version` and `pyproject.toml` version move together.
+- **Never bump versions by hand.** `.github/workflows/release.yml` runs on every push to `main`: tests → `scripts/release.py` bumps `manifest.json` + `pyproject.toml`, moves `## [Unreleased]` in `CHANGELOG.md` under the new version, commits `chore(release): vX.Y.Z`, tags and creates a GitHub release.
+- Every user-visible change adds a line under `## [Unreleased]` in `CHANGELOG.md` (Keep a Changelog sections: Added/Changed/Fixed/Removed).
+- Bump level comes from commit messages since the last tag: `#major`, `type!:` or `BREAKING CHANGE` → major; `feat:` or `#minor` → minor; otherwise patch.

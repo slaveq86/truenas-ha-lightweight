@@ -77,6 +77,10 @@ pytest             # unit tests (mocked TrueNAS + fake JSON-RPC server)
 scripts/develop    # run Home Assistant on http://localhost:8123 with this integration
 ```
 
+### Releases
+
+Every push to `main` is tested and released automatically: the version is bumped, `CHANGELOG.md` updated, a `vX.Y.Z` tag and GitHub release created. Add your change under `## [Unreleased]` in `CHANGELOG.md`; use `feat:` / `#minor` for a minor bump and `#major` / `BREAKING CHANGE` for a major one (default is patch). `python scripts/release.py --dry-run` shows what would be released.
+
 A VS Code dev container (`.devcontainer/`) is included and runs `scripts/setup` automatically.
 
 ```

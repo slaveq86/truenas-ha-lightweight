@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/slaveq86/truenas-ha-lightweight/issues",
   "loggers": ["custom_components.truenas_lightweight"],
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.0.1"
 }

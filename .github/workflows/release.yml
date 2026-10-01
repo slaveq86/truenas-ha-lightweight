@@ -1,0 +1,57 @@
+name: Release
+
+# Every push to main (direct commit or merged PR) is tested, then released:
+# version bumped, CHANGELOG.md updated, commit tagged vX.Y.Z and a GitHub Release created.
+# See scripts/release.py for the versioning rules.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  tests:
+    # The release bot's own commit is pushed with GITHUB_TOKEN, which never re-triggers workflows.
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    uses: ./.github/workflows/tests.yml
+
+  release:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - id: prepare
+        run: python scripts/release.py --notes-file "$RUNNER_TEMP/notes.md"
+
+      - name: Commit, tag and push
+        if: steps.prepare.outputs.released == 'true'
+        env:
+          VERSION: ${{ steps.prepare.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md pyproject.toml custom_components/truenas_lightweight/manifest.json
+          git commit -m "chore(release): v${VERSION}"
+          git tag -a "v${VERSION}" -m "v${VERSION}"
+          git push origin HEAD:${{ github.ref_name }} "v${VERSION}"
+
+      - name: Create GitHub release
+        if: steps.prepare.outputs.released == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.prepare.outputs.version }}
+        run: gh release create "v${VERSION}" --title "v${VERSION}" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
