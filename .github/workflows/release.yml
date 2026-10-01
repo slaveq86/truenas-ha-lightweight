@@ -19,7 +19,8 @@ permissions:
 
 jobs:
   tests:
-    # The release bot's own commit is pushed with GITHUB_TOKEN, which never re-triggers workflows.
+    # The release commit is pushed with the deploy key, which (unlike GITHUB_TOKEN) does trigger this workflow
+    # again; skipping tests here also skips the release job, so it doesn't release itself.
     if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
     uses: ./.github/workflows/tests.yml
 
@@ -33,6 +34,9 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          # main is protected by a ruleset (PRs + required checks) whose bypass list allows deploy keys; the
+          # release commit can't come through a PR, so it is pushed over SSH with this write deploy key.
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -51,7 +55,8 @@ jobs:
           git add CHANGELOG.md pyproject.toml custom_components/truenas_lightweight/manifest.json
           git commit -m "chore(release): v${VERSION}"
           git tag -a "v${VERSION}" -m "v${VERSION}"
-          git push origin HEAD:${{ github.ref_name }} "v${VERSION}"
+          # Atomic: never leave a tag pushed without its release commit on main.
+          git push --atomic origin HEAD:${{ github.ref_name }} "v${VERSION}"
 
       - name: Create GitHub release
         if: steps.prepare.outputs.released == 'true'
