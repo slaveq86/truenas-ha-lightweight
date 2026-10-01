@@ -6,6 +6,7 @@ import asyncio
 import itertools
 import logging
 import time
+from collections import Counter
 from typing import Any
 
 import aiohttp
@@ -16,7 +17,7 @@ from .exceptions import (
     TrueNASError,
     TrueNASPermissionError,
 )
-from .models import Alert, App, Pool, Stats, SystemInfo, Task
+from .models import Alert, App, Disk, Pool, Stats, SystemInfo, Task
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -133,6 +134,21 @@ class TrueNASClient:
 
     async def snapshot_tasks(self) -> dict[str, Task]:
         return {str(t["id"]): Task.from_snapshot(t) for t in await self.call("pool.snapshottask.query")}
+
+    async def disks(self) -> dict[str, Disk]:
+        """Disks keyed by `Disk.key`; `extra.pools` fills in the pool each disk belongs to."""
+        disks = [Disk.from_api(d) for d in await self.call("disk.query", [[], {"extra": {"pools": True}}])]
+        # Some USB/SATA bridges report one serial for every disk behind them; tell those apart by name rather than
+        # letting one silently replace the other.
+        keys = Counter(d.key for d in disks)
+        return {d.key if keys[d.key] == 1 else f"{d.key}_{d.name}": d for d in disks}
+
+    async def disk_temperatures(self) -> dict[str, float]:
+        """Temperatures in °C keyed by disk name (sda, ...); disks that can't report one are left out."""
+        temps = await self.call("disk.temperatures", [[]])
+        if not isinstance(temps, dict):
+            return {}
+        return {name: t for name, t in temps.items() if isinstance(t, int | float) and not isinstance(t, bool)}
 
     def realtime_stats(self) -> Stats | None:
         """Latest reporting.realtime snapshot, or None if missing or stale."""

@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import timedelta
 from unittest.mock import AsyncMock
 
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
@@ -80,6 +81,11 @@ async def test_entities(hass: HomeAssistant, mock_client: AsyncMock, mock_config
         "binary_sensor.truenas_data_protection_snapshot_tank_photos_recursive_48_hours_problem": STATE_ON,
         "sensor.truenas_data_protection_snapshot_tank_vms_1_day_status": "failed",
         "binary_sensor.truenas_data_protection_snapshot_tank_vms_1_day_problem": STATE_ON,
+        "sensor.truenas_pool_tank_disk_sda_temperature": "34",
+        "sensor.truenas_pool_tank_disk_sdb_temperature": "36",
+        "sensor.truenas_pool_backup_disk_sdc_temperature": "52",
+        "sensor.truenas_disk_nvme0n1_temperature": "45",
+        "sensor.truenas_disk_sdd_temperature": "unknown",
     }
     for entity_id, state in expected.items():
         assert (s := hass.states.get(entity_id)) is not None, entity_id
@@ -104,6 +110,18 @@ async def test_entities(hass: HomeAssistant, mock_client: AsyncMock, mock_config
         == f"{HOST_ID}_rsync_3_status"
     )
 
+    sda = hass.states.get("sensor.truenas_pool_tank_disk_sda_temperature").attributes
+    assert sda["unit_of_measurement"] == "°C"
+    assert sda["serial"] == "WD-WCC7K1ABCDEF"
+    assert sda["model"] == "WDC WD40EFRX-68N32N0"
+    assert sda["type"] == "HDD"
+    assert sda["pool"] == "tank"
+    # Keyed by serial, not by the kernel name that can change between boots.
+    assert (
+        er.async_get(hass).async_get("sensor.truenas_pool_tank_disk_sda_temperature").unique_id
+        == f"{HOST_ID}_disk_WD-WCC7K1ABCDEF_temperature"
+    )
+
     # Disabled by default.
     assert er.async_get(hass).async_get("sensor.truenas_cpu_temperature").disabled_by is not None
 
@@ -126,6 +144,10 @@ async def test_child_devices(hass: HomeAssistant, mock_client: AsyncMock, mock_c
         "sensor.truenas_apps_running": "truenas Apps",
         "sensor.truenas_apps_plex_state": "truenas Apps",
         "binary_sensor.truenas_data_protection_snapshot_tank_vms_1_day_problem": "truenas Data protection",
+        "sensor.truenas_pool_backup_disk_sdc_temperature": "truenas Pool backup",
+        # The boot pool has no pool device; boot and unassigned disks sit on the host.
+        "sensor.truenas_disk_nvme0n1_temperature": "truenas",
+        "sensor.truenas_disk_sdd_temperature": "truenas",
     }.items():
         assert devices.async_get(entities.async_get(entity_id).device_id).name == device, entity_id
 
@@ -196,6 +218,87 @@ async def test_new_and_removed_tasks(
     assert (
         hass.states.get("binary_sensor.truenas_data_protection_rsync_mnt_tank_docs_problem").state == STATE_UNAVAILABLE
     )
+
+
+async def test_disks_refresh_slowly(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry, freezer: FrozenDateTimeFactory
+) -> None:
+    await _setup(hass, mock_config_entry)
+    mock_client.disk_temperatures.return_value = {"sda": 40}
+
+    async def advance(delta: timedelta) -> None:
+        freezer.tick(delta)
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    # Regular scans reuse the cached disks.
+    await advance(timedelta(seconds=31))
+    assert mock_client.system_info.await_count == 2
+    assert mock_client.disk_temperatures.await_count == 1
+    assert hass.states.get("sensor.truenas_pool_tank_disk_sda_temperature").state == "34"
+
+    await advance(timedelta(minutes=5))
+    assert mock_client.disk_temperatures.await_count == 2
+    assert hass.states.get("sensor.truenas_pool_tank_disk_sda_temperature").state == "40"
+    assert hass.states.get("sensor.truenas_pool_tank_disk_sdb_temperature").state == "unknown"
+
+    # A removed disk goes unavailable.
+    mock_client.disks.return_value = {k: d for k, d in mock_client.disks.return_value.items() if d.name != "sdb"}
+    await advance(timedelta(minutes=5))
+    assert hass.states.get("sensor.truenas_pool_tank_disk_sdb_temperature").state == STATE_UNAVAILABLE
+
+
+async def test_disk_permission_denied(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    mock_client.disk_temperatures.side_effect = TrueNASPermissionError("EACCES")
+    await _setup(hass, mock_config_entry)
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    # Disks are still known, just without a temperature.
+    assert hass.states.get("sensor.truenas_pool_tank_disk_sda_temperature").state == "unknown"
+
+
+async def test_disk_errors_degrade_and_back_off(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry, freezer: FrozenDateTimeFactory
+) -> None:
+    # Slow SMART reads can time out; that must not take every other entity down with it.
+    mock_client.disk_temperatures.side_effect = TrueNASConnectionError("Timeout calling disk.temperatures")
+    await _setup(hass, mock_config_entry)
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    assert hass.states.get("sensor.truenas_cpu_usage").state == "12.0"
+    assert hass.states.get("sensor.truenas_pool_tank_disk_sda_temperature").state == "unknown"
+
+    # Not retried on every scan.
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert mock_client.disk_temperatures.await_count == 1
+
+    # A failing disk.query keeps the known disks; temperatures recover.
+    mock_client.disk_temperatures.side_effect = None
+    mock_client.disks.side_effect = TrueNASConnectionError("Timeout calling disk.query")
+    freezer.tick(timedelta(minutes=5))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert mock_client.disk_temperatures.await_count == 2
+    assert hass.states.get("sensor.truenas_pool_tank_disk_sda_temperature").state == "34"
+
+
+async def test_disk_auth_error_starts_reauth(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    mock_client.disk_temperatures.side_effect = TrueNASAuthError("revoked")
+    await _setup(hass, mock_config_entry)
+    assert mock_config_entry.state is ConfigEntryState.SETUP_ERROR
+
+
+async def test_disk_query_denied(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    mock_client.disks.side_effect = TrueNASPermissionError("EACCES")
+    await _setup(hass, mock_config_entry)
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    assert hass.states.get("sensor.truenas_pool_tank_disk_sda_temperature") is None
 
 
 async def test_alert_events(hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry) -> None:
@@ -329,7 +432,18 @@ async def test_diagnostics_redacts(
     # Non-identifying fields stay readable.
     assert rsync["state"] == "SUCCESS"
     assert diag["data"]["pools"][0]["status"] == "ONLINE"
+    assert diag["data"]["disks"][0]["temperature"] == 34
     # Pool names (also dict keys), datasets, task names derived from paths, remotes and free text are all gone.
     text = str(diag)
-    for secret in ("1-secretkey", "backup.lan", "nas2.lan", "/srv/photos", "/mnt/tank", "tank", "photos", "plex"):
+    for secret in (
+        "1-secretkey",
+        "backup.lan",
+        "nas2.lan",
+        "/srv/photos",
+        "/mnt/tank",
+        "tank",
+        "photos",
+        "plex",
+        "WD-WCC7K1",
+    ):
         assert secret not in text, secret

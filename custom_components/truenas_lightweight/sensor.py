@@ -16,7 +16,7 @@ from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfInformation, U
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .api import ALERT_LEVELS, TASK_STATES, App, Pool, Task, TrueNASData
+from .api import ALERT_LEVELS, TASK_STATES, App, Disk, Pool, Task, TrueNASData
 from .coordinator import TrueNASConfigEntry, TrueNASCoordinator
 from .entity import (
     TASK_KINDS,
@@ -72,6 +72,11 @@ class TrueNASPoolSensorDescription(SensorEntityDescription):
 @dataclass(frozen=True, kw_only=True)
 class TrueNASAppSensorDescription(SensorEntityDescription):
     value_fn: Callable[[App], Any]
+
+
+@dataclass(frozen=True, kw_only=True)
+class TrueNASDiskSensorDescription(SensorEntityDescription):
+    value_fn: Callable[[Disk], Any]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -223,6 +228,19 @@ APP_SENSORS: tuple[TrueNASAppSensorDescription, ...] = (
 )
 
 
+DISK_SENSORS: tuple[TrueNASDiskSensorDescription, ...] = (
+    TrueNASDiskSensorDescription(
+        key="temperature",
+        translation_key="disk_temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda d: d.temperature,
+    ),
+)
+
+
 def _task_sensors(kind: str) -> tuple[TrueNASTaskSensorDescription, ...]:
     return (
         TrueNASTaskSensorDescription(
@@ -262,6 +280,12 @@ async def async_setup_entry(
         coordinator,
         lambda data: data.apps,
         lambda name: (TrueNASAppSensor(coordinator, d, name) for d in APP_SENSORS),
+        async_add_entities,
+    )
+    async_track_items(
+        coordinator,
+        lambda data: data.disks,
+        lambda key: (TrueNASDiskSensor(coordinator, d, key) for d in DISK_SENSORS),
         async_add_entities,
     )
     for kind, descriptions in TASK_SENSORS.items():
@@ -337,6 +361,41 @@ class TrueNASAppSensor(TrueNASEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         app = self.coordinator.data.apps[self._app]
         return {"version": app.version}
+
+
+class TrueNASDiskSensor(TrueNASEntity, SensorEntity):
+    """Sits on the device of the disk's pool; disks outside a data pool (boot, spare, unused) on the host."""
+
+    entity_description: TrueNASDiskSensorDescription
+
+    def __init__(self, coordinator: TrueNASCoordinator, description: TrueNASDiskSensorDescription, key: str) -> None:
+        disk = coordinator.data.disks[key]
+        # pool.query omits the boot pool, so only data pools have a device.
+        device = pool_device(coordinator, disk.pool) if disk.pool in coordinator.data.pools else None
+        super().__init__(coordinator, f"disk_{key}_{description.key}", device)
+        self.entity_description = description
+        self._key = key
+        self._attr_translation_placeholders = {"disk": disk.name}
+
+    @property
+    def available(self) -> bool:
+        return super().available and self._key in self.coordinator.data.disks
+
+    @property
+    def native_value(self) -> Any:
+        return self.entity_description.value_fn(self.coordinator.data.disks[self._key])
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        disk = self.coordinator.data.disks[self._key]
+        return {
+            "disk": disk.name,
+            "serial": disk.serial,
+            "model": disk.model,
+            "type": disk.type,
+            "size": disk.size,
+            "pool": disk.pool,
+        }
 
 
 class TrueNASTaskSensor(TrueNASTaskEntity, SensorEntity):
