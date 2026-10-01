@@ -8,6 +8,10 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
 
 ## [Unreleased]
 
+### Added
+
+- Example dashboard (`examples/dashboard.yaml`) covering system, storage, apps and data protection entities.
+
 ## [0.0.4] - 2026-10-01
 
 - ssh keys (#3)
