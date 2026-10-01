@@ -1,0 +1,12 @@
+{
+  "version": "25.04.2",
+  "hostname": "truenas",
+  "physmem": 34359738368,
+  "model": "AMD Ryzen 5 5600G",
+  "cores": 12,
+  "physical_cores": 6,
+  "loadavg": [0.42, 0.37, 0.31],
+  "uptime_seconds": 86400.5,
+  "system_product": "B550M",
+  "boottime": {"$date": 1759276800000}
+}

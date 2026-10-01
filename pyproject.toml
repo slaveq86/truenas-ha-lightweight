@@ -1,0 +1,22 @@
+[project]
+name = "truenas-ha-lightweight"
+version = "0.1.0"
+description = "Lightweight read-only TrueNAS integration for Home Assistant"
+requires-python = ">=3.13"
+license = "Apache-2.0"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "ASYNC", "RUF", "PL", "PT"]
+ignore = ["PLR0913", "PLR2004"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

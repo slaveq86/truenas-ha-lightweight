@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Install development dependencies (pytest harness pulls in a matching Home Assistant).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+python3 -m pip install --upgrade pip
+python3 -m pip install -r requirements_dev.txt
+pre-commit install

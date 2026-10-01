@@ -1,0 +1,4 @@
+[
+  {"name": "plex", "id": "plex", "state": "RUNNING", "version": "1.2.0", "human_version": "1.41.0_1.2.0", "upgrade_available": true},
+  {"name": "nextcloud", "id": "nextcloud", "state": "STOPPED", "version": "2.0.1", "human_version": "30.0.1_2.0.1", "upgrade_available": false}
+]

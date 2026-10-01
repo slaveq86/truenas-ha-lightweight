@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Run a local Home Assistant on :8123 with this integration loaded from the repo.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+mkdir -p config
+export PYTHONPATH="${PWD}:${PYTHONPATH:-}"
+exec hass --config "${PWD}/config" --debug

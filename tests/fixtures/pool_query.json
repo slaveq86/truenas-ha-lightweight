@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "name": "tank",
+    "status": "ONLINE",
+    "healthy": true,
+    "size": 1000000000000,
+    "allocated": 810000000000,
+    "free": 190000000000
+  },
+  {
+    "id": 2,
+    "name": "backup",
+    "status": "DEGRADED",
+    "healthy": false,
+    "size": 2000000000000,
+    "allocated": 500000000000,
+    "free": 1500000000000
+  }
+]

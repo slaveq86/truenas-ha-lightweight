@@ -1,0 +1,12 @@
+{
+  "cpu": {
+    "cpu0": {"usage": 10.0, "temp": 44.0},
+    "cpu1": {"usage": 14.0, "temp": 46.0},
+    "cpu": {"usage": 12.04, "temp": 45.0}
+  },
+  "memory": {
+    "physical_memory_total": 34359738368,
+    "physical_memory_available": 8589934592,
+    "arc_size": 17179869184
+  }
+}

@@ -1,0 +1,26 @@
+[
+  {
+    "uuid": "a1",
+    "klass": "ZpoolCapacityWarning",
+    "level": "WARNING",
+    "formatted": "Space usage for pool \"tank\" is 81%.",
+    "dismissed": false,
+    "datetime": {"$date": 1759300000000}
+  },
+  {
+    "uuid": "a2",
+    "klass": "NTPHealthCheck",
+    "level": "INFO",
+    "formatted": "NTP health check info.",
+    "dismissed": false,
+    "datetime": {"$date": 1759300000000}
+  },
+  {
+    "uuid": "a3",
+    "klass": "SMART",
+    "level": "CRITICAL",
+    "formatted": "Old dismissed alert.",
+    "dismissed": true,
+    "datetime": {"$date": 1759200000000}
+  }
+]

@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json
+
+# Dev Home Assistant config (keep only configuration.yaml)
+config/*
+!config/configuration.yaml

@@ -1,0 +1,106 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to TrueNAS",
+        "description": "Use an API key of a user with the **Read-Only Admin** role. TrueNAS 25.04 or newer is required. The connection always uses secure WebSocket (wss).",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "verify_ssl": "Verify SSL certificate",
+          "api_key": "API key"
+        },
+        "data_description": {
+          "host": "Hostname or IP address of your TrueNAS.",
+          "port": "HTTPS port of the TrueNAS web UI.",
+          "verify_ssl": "Disable for the default self-signed certificate."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate TrueNAS",
+        "description": "The API key for {host} was rejected or revoked. Enter a new one.",
+        "data": {
+          "api_key": "API key"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect. Check host, port and SSL settings.",
+      "invalid_auth": "The API key was rejected.",
+      "insufficient_permissions": "The API key's user lacks the permissions needed (assign the Read-Only Admin role).",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This TrueNAS system is already configured.",
+      "reauth_successful": "Re-authentication was successful.",
+      "wrong_device": "The API key belongs to a different TrueNAS system."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Update interval (seconds)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "problem": { "name": "Problem" },
+      "pool_problem": { "name": "Pool {pool} problem" },
+      "app_update": { "name": "App {app} update" }
+    },
+    "sensor": {
+      "cpu_usage": { "name": "CPU usage" },
+      "cpu_temperature": { "name": "CPU temperature" },
+      "memory_used_pct": { "name": "Memory usage" },
+      "memory_used": { "name": "Memory used" },
+      "memory_available": { "name": "Memory available" },
+      "arc_size": { "name": "ZFS ARC size" },
+      "load_1": { "name": "Load (1 min)" },
+      "load_5": { "name": "Load (5 min)" },
+      "load_15": { "name": "Load (15 min)" },
+      "boot_time": { "name": "Last boot" },
+      "version": { "name": "Version" },
+      "active_alerts": { "name": "Active alerts" },
+      "highest_alert_level": {
+        "name": "Highest alert level",
+        "state": {
+          "ok": "OK",
+          "info": "Info",
+          "notice": "Notice",
+          "warning": "Warning",
+          "error": "Error",
+          "critical": "Critical",
+          "alert": "Alert",
+          "emergency": "Emergency"
+        }
+      },
+      "apps_running": { "name": "Apps running" },
+      "pool_status": {
+        "name": "Pool {pool} status",
+        "state": {
+          "online": "Online",
+          "degraded": "Degraded",
+          "faulted": "Faulted",
+          "offline": "Offline",
+          "unavail": "Unavailable",
+          "removed": "Removed"
+        }
+      },
+      "pool_used_pct": { "name": "Pool {pool} usage" },
+      "pool_free": { "name": "Pool {pool} free space" },
+      "app_state": {
+        "name": "App {app} state",
+        "state": {
+          "running": "Running",
+          "deploying": "Deploying",
+          "stopping": "Stopping",
+          "stopped": "Stopped",
+          "crashed": "Crashed"
+        }
+      }
+    }
+  }
+}
