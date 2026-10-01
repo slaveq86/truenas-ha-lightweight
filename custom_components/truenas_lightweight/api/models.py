@@ -9,6 +9,10 @@ from typing import Any
 # Ordered from least to most severe, as defined by TrueNAS AlertLevel.
 ALERT_LEVELS = ["INFO", "NOTICE", "WARNING", "ERROR", "CRITICAL", "ALERT", "EMERGENCY"]
 
+# Last-run states shared by rsync (job states) and snapshot tasks (zettarepl states, normalised).
+TASK_STATES = ["PENDING", "WAITING", "RUNNING", "SUCCESS", "FAILED", "ABORTED", "HOLD"]
+_TASK_STATE_ALIASES = {"FINISHED": "SUCCESS", "ERROR": "FAILED"}
+
 
 def _parse_date(value: Any) -> datetime | None:
     """Parse TrueNAS JSON-RPC datetime encoding ({"$date": epoch_ms})."""
@@ -170,6 +174,75 @@ class App:
 
 
 @dataclass(slots=True)
+class Task:
+    """A data protection task (rsync, periodic snapshot) and the outcome of its last run."""
+
+    id: int
+    name: str
+    enabled: bool
+    state: str
+    last_run: datetime | None
+    error: str | None
+    details: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_rsync(cls, data: dict[str, Any]) -> Task:
+        remote = data.get("remotemodule") if data.get("mode") == "MODULE" else data.get("remotepath")
+        return cls._build(
+            data,
+            name=data.get("desc") or data.get("path") or f"Task {data['id']}",
+            details={
+                "direction": (data.get("direction") or "").lower() or None,
+                "path": data.get("path"),
+                "remotehost": data.get("remotehost"),
+                "remote": remote,
+            },
+        )
+
+    @classmethod
+    def from_snapshot(cls, data: dict[str, Any]) -> Task:
+        dataset = data.get("dataset") or f"Task {data['id']}"
+        lifetime = data.get("lifetime_value")
+        return cls._build(
+            data,
+            name=f"{dataset} (recursive)" if data.get("recursive") else dataset,
+            details={
+                "dataset": data.get("dataset"),
+                "naming_schema": data.get("naming_schema"),
+                "lifetime": f"{lifetime} {data.get('lifetime_unit', '').lower()}".strip() if lifetime else None,
+            },
+        )
+
+    @classmethod
+    def _build(cls, data: dict[str, Any], *, name: str, details: dict[str, Any]) -> Task:
+        # Prefer the last job (rsync); fall back to the task state dict (snapshot tasks, older payloads).
+        job = data.get("job") if isinstance(data.get("job"), dict) else None
+        state = data.get("state") if isinstance(data.get("state"), dict) else {}
+        if job:
+            raw = job.get("state")
+            last_run = _parse_date(job.get("time_finished")) or _parse_date(job.get("time_started"))
+            error = job.get("error")
+        else:
+            raw = state.get("state")
+            last_run = _parse_date(state.get("datetime"))
+            error = state.get("error")
+        raw = (raw or "PENDING").upper()
+        return cls(
+            id=data["id"],
+            name=name,
+            enabled=bool(data.get("enabled", True)),
+            state=_TASK_STATE_ALIASES.get(raw, raw),
+            last_run=last_run,
+            error=error.strip() if isinstance(error, str) and error.strip() else None,
+            details=details,
+        )
+
+    @property
+    def failed(self) -> bool:
+        return self.state in ("FAILED", "ABORTED")
+
+
+@dataclass(slots=True)
 class TrueNASData:
     """Everything the coordinator fetches in one poll."""
 
@@ -178,6 +251,8 @@ class TrueNASData:
     alerts: list[Alert] = field(default_factory=list)
     pools: dict[str, Pool] = field(default_factory=dict)
     apps: dict[str, App] = field(default_factory=dict)
+    rsync_tasks: dict[str, Task] = field(default_factory=dict)
+    snapshot_tasks: dict[str, Task] = field(default_factory=dict)
 
     @property
     def active_alerts(self) -> list[Alert]:

@@ -11,15 +11,23 @@ from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_capture_events,
+    async_fire_time_changed,
+)
 
 from custom_components.truenas_lightweight.api import (
+    Alert,
     App,
     TrueNASAuthError,
     TrueNASConnectionError,
     TrueNASPermissionError,
 )
+from custom_components.truenas_lightweight.const import EVENT_ALERT
 from custom_components.truenas_lightweight.diagnostics import async_get_config_entry_diagnostics
+
+from .conftest import HOST_ID
 
 
 async def _setup(hass: HomeAssistant, entry: MockConfigEntry) -> None:
@@ -57,6 +65,17 @@ async def test_entities(hass: HomeAssistant, mock_client: AsyncMock, mock_config
         "binary_sensor.truenas_pool_backup_problem": STATE_ON,
         "binary_sensor.truenas_app_plex_update": STATE_ON,
         "binary_sensor.truenas_app_nextcloud_update": STATE_OFF,
+        "sensor.truenas_rsync_photos_to_backup_status": "success",
+        "sensor.truenas_rsync_photos_to_backup_last_run": "2025-10-01T06:36:40+00:00",
+        "binary_sensor.truenas_rsync_photos_to_backup_problem": STATE_OFF,
+        "sensor.truenas_rsync_mnt_tank_docs_status": "failed",
+        "binary_sensor.truenas_rsync_mnt_tank_docs_problem": STATE_ON,
+        "sensor.truenas_rsync_never_run_status": "pending",
+        "sensor.truenas_rsync_never_run_last_run": "unknown",
+        "sensor.truenas_snapshot_tank_photos_recursive_status": "success",
+        "binary_sensor.truenas_snapshot_tank_photos_recursive_problem": STATE_OFF,
+        "sensor.truenas_snapshot_tank_vms_status": "failed",
+        "binary_sensor.truenas_snapshot_tank_vms_problem": STATE_ON,
     }
     for entity_id, state in expected.items():
         assert (s := hass.states.get(entity_id)) is not None, entity_id
@@ -68,6 +87,15 @@ async def test_entities(hass: HomeAssistant, mock_client: AsyncMock, mock_config
     memory = hass.states.get("sensor.truenas_memory_used")
     assert memory.attributes["unit_of_measurement"] == "GiB"
     assert float(memory.state) == 24.0
+
+    docs = hass.states.get("sensor.truenas_rsync_mnt_tank_docs_status").attributes
+    assert docs["direction"] == "pull"
+    assert docs["remote"] == "docs"
+    assert docs["error"].startswith("rsync command returned 255")
+    assert hass.states.get("binary_sensor.truenas_snapshot_tank_vms_problem").attributes["error"] == "dataset is busy"
+    assert (
+        er.async_get(hass).async_get("sensor.truenas_rsync_never_run_status").unique_id == f"{HOST_ID}_rsync_3_status"
+    )
 
     # Disabled by default.
     assert er.async_get(hass).async_get("sensor.truenas_cpu_temperature").disabled_by is not None
@@ -82,6 +110,58 @@ async def test_new_and_removed_apps(
 
     assert hass.states.get("sensor.truenas_app_jellyfin_state").state == "deploying"
     assert hass.states.get("sensor.truenas_app_plex_state").state == STATE_UNAVAILABLE
+
+
+async def test_new_and_removed_tasks(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    await _setup(hass, mock_config_entry)
+    tasks = mock_client.rsync_tasks.return_value
+    running = replace(tasks["1"], state="RUNNING")
+    mock_client.rsync_tasks.return_value = {"1": running, "9": replace(tasks["3"], id=9, name="New task")}
+    await _tick(hass)
+
+    assert hass.states.get("sensor.truenas_rsync_photos_to_backup_status").state == "running"
+    assert hass.states.get("sensor.truenas_rsync_new_task_status").state == "pending"
+    assert hass.states.get("sensor.truenas_rsync_mnt_tank_docs_status").state == STATE_UNAVAILABLE
+    assert hass.states.get("binary_sensor.truenas_rsync_mnt_tank_docs_problem").state == STATE_UNAVAILABLE
+
+
+async def test_alert_events(hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry) -> None:
+    events = async_capture_events(hass, EVENT_ALERT)
+    await _setup(hass, mock_config_entry)
+    # The first refresh only records the current alerts.
+    assert events == []
+
+    alerts = mock_client.alerts.return_value
+    new = Alert("a9", "SMART", "CRITICAL", "Disk sda failing.", False, None)
+    # a1 cleared, a9 raised, a2 unchanged, a3 still dismissed.
+    mock_client.alerts.return_value = [alerts[1], alerts[2], new]
+    await _tick(hass)
+
+    assert [(e.data["action"], e.data["uuid"]) for e in events] == [("raised", "a9"), ("cleared", "a1")]
+    raised = events[0].data
+    assert raised["level"] == "CRITICAL"
+    assert raised["klass"] == "SMART"
+    assert raised["message"] == "Disk sda failing."
+    assert raised["hostname"] == "truenas"
+    assert raised["config_entry_id"] == mock_config_entry.entry_id
+    assert events[1].data["datetime"] == "2025-10-01T06:26:40+00:00"
+
+    await _tick(hass)
+    assert len(events) == 2
+
+
+async def test_alert_permission_denied_fires_nothing(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    events = async_capture_events(hass, EVENT_ALERT)
+    await _setup(hass, mock_config_entry)
+    mock_client.alerts.side_effect = TrueNASPermissionError("EACCES")
+    await _tick(hass)
+
+    assert events == []
+    assert hass.states.get("sensor.truenas_active_alerts").state == "0"
 
 
 async def test_boot_time_stable_until_reboot(
@@ -154,4 +234,6 @@ async def test_diagnostics_redacts(
     assert diag["entry"]["data"]["api_key"] == "**REDACTED**"
     assert diag["entry"]["data"]["host"] == "**REDACTED**"
     assert diag["data"]["system"]["hostname"] == "**REDACTED**"
+    assert diag["data"]["rsync_tasks"]["1"]["details"]["remotehost"] == "**REDACTED**"
+    assert "backup.lan" not in str(diag)
     assert "1-secretkey" not in str(diag)

@@ -7,15 +7,17 @@ from .exceptions import (
     TrueNASError,
     TrueNASPermissionError,
 )
-from .models import ALERT_LEVELS, Alert, App, Pool, Stats, SystemInfo, TrueNASData
+from .models import ALERT_LEVELS, TASK_STATES, Alert, App, Pool, Stats, SystemInfo, Task, TrueNASData
 
 __all__ = [
     "ALERT_LEVELS",
+    "TASK_STATES",
     "Alert",
     "App",
     "Pool",
     "Stats",
     "SystemInfo",
+    "Task",
     "TrueNASAuthError",
     "TrueNASClient",
     "TrueNASConnectionError",

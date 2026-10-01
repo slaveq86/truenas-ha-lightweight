@@ -16,13 +16,14 @@ from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfInformation, U
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .api import ALERT_LEVELS, App, Pool, TrueNASData
+from .api import ALERT_LEVELS, TASK_STATES, App, Pool, Task, TrueNASData
 from .coordinator import TrueNASConfigEntry, TrueNASCoordinator
-from .entity import TrueNASEntity, async_track_items
+from .entity import TASK_KINDS, TrueNASEntity, TrueNASTaskEntity, async_track_items, task_items
 
 POOL_STATUSES = ["online", "degraded", "faulted", "offline", "unavail", "removed"]
 APP_STATES = ["running", "deploying", "stopping", "stopped", "crashed"]
 ALERT_LEVEL_OPTIONS = ["ok", *(level.lower() for level in ALERT_LEVELS)]
+TASK_STATE_OPTIONS = [state.lower() for state in TASK_STATES]
 
 
 def _enum(value: str, options: list[str]) -> str | None:
@@ -61,6 +62,12 @@ class TrueNASPoolSensorDescription(SensorEntityDescription):
 @dataclass(frozen=True, kw_only=True)
 class TrueNASAppSensorDescription(SensorEntityDescription):
     value_fn: Callable[[App], Any]
+
+
+@dataclass(frozen=True, kw_only=True)
+class TrueNASTaskSensorDescription(SensorEntityDescription):
+    value_fn: Callable[[Task], Any]
+    attrs_fn: Callable[[Task], dict[str, Any]] | None = None
 
 
 _BYTES = {
@@ -205,6 +212,28 @@ APP_SENSORS: tuple[TrueNASAppSensorDescription, ...] = (
 )
 
 
+def _task_sensors(kind: str) -> tuple[TrueNASTaskSensorDescription, ...]:
+    return (
+        TrueNASTaskSensorDescription(
+            key="status",
+            translation_key=f"{kind}_status",
+            device_class=SensorDeviceClass.ENUM,
+            options=TASK_STATE_OPTIONS,
+            value_fn=lambda t: _enum(t.state, TASK_STATE_OPTIONS),
+            attrs_fn=lambda t: {"enabled": t.enabled, "error": t.error, **t.details},
+        ),
+        TrueNASTaskSensorDescription(
+            key="last_run",
+            translation_key=f"{kind}_last_run",
+            device_class=SensorDeviceClass.TIMESTAMP,
+            value_fn=lambda t: t.last_run,
+        ),
+    )
+
+
+TASK_SENSORS = {kind: _task_sensors(kind) for kind in TASK_KINDS}
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: TrueNASConfigEntry,
@@ -224,6 +253,15 @@ async def async_setup_entry(
         lambda name: (TrueNASAppSensor(coordinator, d, name) for d in APP_SENSORS),
         async_add_entities,
     )
+    for kind, descriptions in TASK_SENSORS.items():
+        async_track_items(
+            coordinator,
+            lambda data, kind=kind: task_items(data, kind),
+            lambda task_id, kind=kind, descriptions=descriptions: (
+                TrueNASTaskSensor(coordinator, d, kind, task_id) for d in descriptions
+            ),
+            async_add_entities,
+        )
 
 
 class TrueNASSystemSensor(TrueNASEntity, SensorEntity):
@@ -289,3 +327,23 @@ class TrueNASAppSensor(TrueNASEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         app = self.coordinator.data.apps[self._app]
         return {"version": app.version}
+
+
+class TrueNASTaskSensor(TrueNASTaskEntity, SensorEntity):
+    entity_description: TrueNASTaskSensorDescription
+
+    def __init__(
+        self, coordinator: TrueNASCoordinator, description: TrueNASTaskSensorDescription, kind: str, task_id: str
+    ) -> None:
+        super().__init__(coordinator, description.key, kind, task_id)
+        self.entity_description = description
+
+    @property
+    def native_value(self) -> Any:
+        return self.entity_description.value_fn(self.task)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.entity_description.attrs_fn is None:
+            return None
+        return self.entity_description.attrs_fn(self.task)

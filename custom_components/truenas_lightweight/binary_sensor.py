@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import ALERT_LEVELS
 from .coordinator import TrueNASConfigEntry, TrueNASCoordinator
-from .entity import TrueNASEntity, async_track_items
+from .entity import TASK_KINDS, TrueNASEntity, TrueNASTaskEntity, async_track_items, task_items
 
 WARNING_SEVERITY = ALERT_LEVELS.index("WARNING")
 
@@ -32,6 +34,13 @@ async def async_setup_entry(
         lambda name: [TrueNASAppUpdateSensor(coordinator, name)],
         async_add_entities,
     )
+    for kind in TASK_KINDS:
+        async_track_items(
+            coordinator,
+            lambda data, kind=kind: task_items(data, kind),
+            lambda task_id, kind=kind: [TrueNASTaskProblemSensor(coordinator, kind, task_id)],
+            async_add_entities,
+        )
 
 
 class TrueNASProblemSensor(TrueNASEntity, BinarySensorEntity):
@@ -86,3 +95,21 @@ class TrueNASAppUpdateSensor(TrueNASEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         return self.coordinator.data.apps[self._app].upgrade_available
+
+
+class TrueNASTaskProblemSensor(TrueNASTaskEntity, BinarySensorEntity):
+    """On when the task's last run failed or was aborted."""
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    def __init__(self, coordinator: TrueNASCoordinator, kind: str, task_id: str) -> None:
+        self._attr_translation_key = f"{kind}_problem"
+        super().__init__(coordinator, "problem", kind, task_id)
+
+    @property
+    def is_on(self) -> bool:
+        return self.task.failed
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"error": self.task.error}

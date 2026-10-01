@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1,
+    "dataset": "tank/photos",
+    "recursive": true,
+    "lifetime_value": 2,
+    "lifetime_unit": "WEEK",
+    "naming_schema": "auto-%Y-%m-%d_%H-%M",
+    "enabled": true,
+    "state": {"state": "FINISHED", "datetime": {"$date": 1759300000000}}
+  },
+  {
+    "id": 2,
+    "dataset": "tank/vms",
+    "recursive": false,
+    "lifetime_value": 1,
+    "lifetime_unit": "DAY",
+    "naming_schema": "hourly-%Y-%m-%d_%H-%M",
+    "enabled": true,
+    "state": {"state": "ERROR", "datetime": {"$date": 1759300000000}, "error": "dataset is busy"}
+  }
+]

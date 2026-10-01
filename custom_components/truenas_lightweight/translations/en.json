@@ -48,23 +48,59 @@
   },
   "entity": {
     "binary_sensor": {
-      "problem": { "name": "Problem" },
-      "pool_problem": { "name": "Pool {pool} problem" },
-      "app_update": { "name": "App {app} update" }
+      "problem": {
+        "name": "Problem"
+      },
+      "pool_problem": {
+        "name": "Pool {pool} problem"
+      },
+      "app_update": {
+        "name": "App {app} update"
+      },
+      "rsync_problem": {
+        "name": "Rsync {task} problem"
+      },
+      "snapshot_problem": {
+        "name": "Snapshot {task} problem"
+      }
     },
     "sensor": {
-      "cpu_usage": { "name": "CPU usage" },
-      "cpu_temperature": { "name": "CPU temperature" },
-      "memory_used_pct": { "name": "Memory usage" },
-      "memory_used": { "name": "Memory used" },
-      "memory_available": { "name": "Memory available" },
-      "arc_size": { "name": "ZFS ARC size" },
-      "load_1": { "name": "Load (1 min)" },
-      "load_5": { "name": "Load (5 min)" },
-      "load_15": { "name": "Load (15 min)" },
-      "boot_time": { "name": "Last boot" },
-      "version": { "name": "Version" },
-      "active_alerts": { "name": "Active alerts" },
+      "cpu_usage": {
+        "name": "CPU usage"
+      },
+      "cpu_temperature": {
+        "name": "CPU temperature"
+      },
+      "memory_used_pct": {
+        "name": "Memory usage"
+      },
+      "memory_used": {
+        "name": "Memory used"
+      },
+      "memory_available": {
+        "name": "Memory available"
+      },
+      "arc_size": {
+        "name": "ZFS ARC size"
+      },
+      "load_1": {
+        "name": "Load (1 min)"
+      },
+      "load_5": {
+        "name": "Load (5 min)"
+      },
+      "load_15": {
+        "name": "Load (15 min)"
+      },
+      "boot_time": {
+        "name": "Last boot"
+      },
+      "version": {
+        "name": "Version"
+      },
+      "active_alerts": {
+        "name": "Active alerts"
+      },
       "highest_alert_level": {
         "name": "Highest alert level",
         "state": {
@@ -78,7 +114,9 @@
           "emergency": "Emergency"
         }
       },
-      "apps_running": { "name": "Apps running" },
+      "apps_running": {
+        "name": "Apps running"
+      },
       "pool_status": {
         "name": "Pool {pool} status",
         "state": {
@@ -90,8 +128,12 @@
           "removed": "Removed"
         }
       },
-      "pool_used_pct": { "name": "Pool {pool} usage" },
-      "pool_free": { "name": "Pool {pool} free space" },
+      "pool_used_pct": {
+        "name": "Pool {pool} usage"
+      },
+      "pool_free": {
+        "name": "Pool {pool} free space"
+      },
       "app_state": {
         "name": "App {app} state",
         "state": {
@@ -101,6 +143,36 @@
           "stopped": "Stopped",
           "crashed": "Crashed"
         }
+      },
+      "rsync_status": {
+        "name": "Rsync {task} status",
+        "state": {
+          "pending": "Pending",
+          "waiting": "Waiting",
+          "running": "Running",
+          "success": "Success",
+          "failed": "Failed",
+          "aborted": "Aborted",
+          "hold": "On hold"
+        }
+      },
+      "rsync_last_run": {
+        "name": "Rsync {task} last run"
+      },
+      "snapshot_status": {
+        "name": "Snapshot {task} status",
+        "state": {
+          "pending": "Pending",
+          "waiting": "Waiting",
+          "running": "Running",
+          "success": "Success",
+          "failed": "Failed",
+          "aborted": "Aborted",
+          "hold": "On hold"
+        }
+      },
+      "snapshot_last_run": {
+        "name": "Snapshot {task} last run"
       }
     }
   }

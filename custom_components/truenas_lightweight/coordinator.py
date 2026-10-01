@@ -12,6 +12,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
+    Alert,
     SystemInfo,
     TrueNASAuthError,
     TrueNASClient,
@@ -19,7 +20,7 @@ from .api import (
     TrueNASError,
     TrueNASPermissionError,
 )
-from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN, LOGGER
+from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN, EVENT_ALERT, LOGGER
 
 BOOT_TIME_TOLERANCE = timedelta(minutes=2)
 
@@ -44,11 +45,14 @@ class TrueNASCoordinator(DataUpdateCoordinator[TrueNASData]):
 
     async def _async_update_data(self) -> TrueNASData:
         try:
-            system, alerts, pools, apps = await asyncio.gather(
+            system, alerts, pools, apps, rsync_tasks, snapshot_tasks = await asyncio.gather(
                 self.client.system_info(),
-                self._optional("alert.list", self.client.alerts, []),
+                # None (not []) when denied, so a denial isn't mistaken for every alert clearing.
+                self._optional("alert.list", self.client.alerts, None),
                 self._optional("pool.query", self.client.pools, {}),
                 self._optional("app.query", self.client.apps, {}),
+                self._optional("rsynctask.query", self.client.rsync_tasks, {}),
+                self._optional("pool.snapshottask.query", self.client.snapshot_tasks, {}),
             )
         except TrueNASAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
@@ -56,13 +60,38 @@ class TrueNASCoordinator(DataUpdateCoordinator[TrueNASData]):
             raise UpdateFailed(str(err)) from err
 
         self._stabilize_boot_time(system)
+        if alerts is not None and self.data is not None:
+            self._fire_alert_events(self.data.active_alerts, [a for a in alerts if not a.dismissed], system)
         return TrueNASData(
             system=system,
             stats=self.client.realtime_stats(),
-            alerts=alerts,
+            alerts=alerts or [],
             pools=pools,
             apps=apps,
+            rsync_tasks=rsync_tasks,
+            snapshot_tasks=snapshot_tasks,
         )
+
+    def _fire_alert_events(self, previous: list[Alert], current: list[Alert], system: SystemInfo) -> None:
+        """Fire EVENT_ALERT for alerts that appeared or cleared since the last poll."""
+        before = {a.uuid: a for a in previous}
+        after = {a.uuid: a for a in current}
+        changes = [("raised", after[u]) for u in after.keys() - before.keys()]
+        changes += [("cleared", before[u]) for u in before.keys() - after.keys()]
+        for action, alert in sorted(changes, key=lambda c: (-c[1].severity, c[1].uuid)):
+            self.hass.bus.async_fire(
+                EVENT_ALERT,
+                {
+                    "action": action,
+                    "config_entry_id": self.config_entry.entry_id,
+                    "hostname": system.hostname,
+                    "uuid": alert.uuid,
+                    "level": alert.level,
+                    "klass": alert.klass,
+                    "message": alert.message,
+                    "datetime": alert.datetime.isoformat() if alert.datetime else None,
+                },
+            )
 
     def _stabilize_boot_time(self, system: SystemInfo) -> None:
         """Keep the previous boot time unless it moved more than poll jitter (i.e. a reboot)."""

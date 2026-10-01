@@ -18,7 +18,7 @@ from custom_components.truenas_lightweight.api import (
     TrueNASError,
     TrueNASPermissionError,
 )
-from custom_components.truenas_lightweight.api.models import SystemInfo
+from custom_components.truenas_lightweight.api.models import SystemInfo, Task
 
 from .conftest import load_fixture
 
@@ -39,6 +39,8 @@ class FakeTrueNAS:
             "alert.list": load_fixture("alert_list.json"),
             "pool.query": load_fixture("pool_query.json"),
             "app.query": load_fixture("app_query.json"),
+            "rsynctask.query": load_fixture("rsynctask_query.json"),
+            "pool.snapshottask.query": load_fixture("snapshottask_query.json"),
         }
 
     async def handler(self, request: web.Request) -> web.WebSocketResponse:
@@ -109,8 +111,13 @@ async def test_fetch_all(fake: tuple[FakeTrueNAS, str], session: aiohttp.ClientS
     server, url = fake
     client = TrueNASClient(session, "unused", VALID_KEY, ws_url=url)
 
-    info, pools, apps, alerts = await asyncio.gather(
-        client.system_info(), client.pools(), client.apps(), client.alerts()
+    info, pools, apps, alerts, rsync, snapshots = await asyncio.gather(
+        client.system_info(),
+        client.pools(),
+        client.apps(),
+        client.alerts(),
+        client.rsync_tasks(),
+        client.snapshot_tasks(),
     )
 
     assert info.hostname == "truenas"
@@ -119,6 +126,8 @@ async def test_fetch_all(fake: tuple[FakeTrueNAS, str], session: aiohttp.ClientS
     assert pools["tank"].used_pct == 81.0
     assert apps["plex"].upgrade_available is True
     assert [a.dismissed for a in alerts] == [False, False, True]
+    assert {k: t.state for k, t in rsync.items()} == {"1": "SUCCESS", "2": "FAILED", "3": "PENDING"}
+    assert {k: t.state for k, t in snapshots.items()} == {"1": "SUCCESS", "2": "FAILED"}
     # Concurrent calls must share a single login.
     assert server.calls.count("auth.login_with_api_key") == 1
 
@@ -206,3 +215,28 @@ def test_model_ignores_cpu_model() -> None:
     info = SystemInfo.from_api({"model": "AMD Ryzen 5 5600G"})
     assert info.model is None
     assert SystemInfo.from_api({"model": "AMD", "system_product": "TRUENAS-MINI-3.0-X+"}).model == "TRUENAS-MINI-3.0-X+"
+
+
+def test_task_prefers_job_over_state() -> None:
+    task = Task.from_rsync(
+        {
+            "id": 7,
+            "path": "/mnt/tank/x",
+            "job": {"state": "RUNNING", "time_started": {"$date": 1759300000000}},
+            "state": {"state": "FAILED", "error": "old"},
+        }
+    )
+    assert task.state == "RUNNING"
+    assert task.error is None
+    assert task.last_run is not None
+    assert task.name == "/mnt/tank/x"
+
+
+def test_task_parsing() -> None:
+    never_run = Task.from_rsync({"id": 3, "desc": "Media", "job": None})
+    assert (never_run.state, never_run.last_run, never_run.failed) == ("PENDING", None, False)
+
+    snapshot = Task.from_snapshot(load_fixture("snapshottask_query.json")[1])
+    assert (snapshot.state, snapshot.error, snapshot.failed) == ("FAILED", "dataset is busy", True)
+    assert snapshot.details["lifetime"] == "1 day"
+    assert Task.from_snapshot(load_fixture("snapshottask_query.json")[0]).name == "tank/photos (recursive)"

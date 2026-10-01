@@ -16,7 +16,7 @@ from .exceptions import (
     TrueNASError,
     TrueNASPermissionError,
 )
-from .models import Alert, App, Pool, Stats, SystemInfo
+from .models import Alert, App, Pool, Stats, SystemInfo, Task
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -119,6 +119,12 @@ class TrueNASClient:
     async def apps(self) -> dict[str, App]:
         apps = (App.from_api(a) for a in await self.call("app.query"))
         return {a.name: a for a in apps}
+
+    async def rsync_tasks(self) -> dict[str, Task]:
+        return {str(t["id"]): Task.from_rsync(t) for t in await self.call("rsynctask.query")}
+
+    async def snapshot_tasks(self) -> dict[str, Task]:
+        return {str(t["id"]): Task.from_snapshot(t) for t in await self.call("pool.snapshottask.query")}
 
     def realtime_stats(self) -> Stats | None:
         """Latest reporting.realtime snapshot, or None if missing or stale."""

@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from yarl import URL
 
-from .api import TrueNASData
+from .api import Task, TrueNASData
 from .const import DOMAIN
 from .coordinator import TrueNASCoordinator
 
@@ -37,13 +37,39 @@ class TrueNASEntity(CoordinatorEntity[TrueNASCoordinator]):
         )
 
 
+TASK_KINDS = ("rsync", "snapshot")
+
+
+def task_items(data: TrueNASData, kind: str) -> dict[str, Task]:
+    """Tasks of one kind ("rsync" or "snapshot"), keyed by task id."""
+    return data.rsync_tasks if kind == "rsync" else data.snapshot_tasks
+
+
+class TrueNASTaskEntity(TrueNASEntity):
+    """Entity bound to one rsync/snapshot task; unavailable once the task is deleted."""
+
+    def __init__(self, coordinator: TrueNASCoordinator, key: str, kind: str, task_id: str) -> None:
+        super().__init__(coordinator, f"{kind}_{task_id}_{key}")
+        self._kind = kind
+        self._task_id = task_id
+        self._attr_translation_placeholders = {"task": self.task.name}
+
+    @property
+    def task(self) -> Task:
+        return task_items(self.coordinator.data, self._kind)[self._task_id]
+
+    @property
+    def available(self) -> bool:
+        return super().available and self._task_id in task_items(self.coordinator.data, self._kind)
+
+
 def async_track_items(
     coordinator: TrueNASCoordinator,
     items_fn: Callable[[TrueNASData], Iterable[str]],
     entities_fn: Callable[[str], Iterable[Entity]],
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add entities for pools/apps now and whenever new ones appear."""
+    """Add entities for pools/apps/tasks now and whenever new ones appear."""
     known: set[str] = set()
 
     @callback

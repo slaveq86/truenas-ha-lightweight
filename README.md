@@ -30,8 +30,51 @@ All entities belong to one device representing the TrueNAS host.
 | Pool *name* problem | binary sensor | on when ZFS reports the pool unhealthy |
 | App *name* state | enum sensor | `running`, `deploying`, `stopping`, `stopped`, `crashed` |
 | App *name* update | binary sensor | on when a newer catalog version is available |
+| Rsync *task* status | enum sensor | `pending`, `waiting`, `running`, `success`, `failed`, `aborted`; attributes: direction, path, remote, error |
+| Rsync *task* last run | timestamp | when the last run finished |
+| Rsync *task* problem | binary sensor | on when the last run failed or was aborted; `error` attribute |
+| Snapshot *dataset* status / last run / problem | as above | periodic snapshot tasks; attributes: naming schema, lifetime |
 
-New pools and apps are picked up automatically; removed ones become unavailable.
+New pools, apps and tasks are picked up automatically; removed ones become unavailable. Rsync tasks are named after
+their description (or path if empty), snapshot tasks after their dataset.
+
+## Alert events
+
+Whenever an alert appears in or disappears from TrueNAS, the integration fires a `truenas_lightweight_alert` event
+(checked every update interval; nothing is fired for alerts already active when Home Assistant starts):
+
+```yaml
+event_type: truenas_lightweight_alert
+data:
+  action: raised            # or "cleared"
+  config_entry_id: 01J...
+  hostname: truenas
+  uuid: 6f1c...
+  level: WARNING            # INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY
+  klass: ZpoolCapacityWarning
+  message: Space usage for pool "tank" is 81%.
+  datetime: "2025-10-01T06:26:40+00:00"
+```
+
+Example automation that pushes every new alert of level WARNING or worse to your phone:
+
+```yaml
+automation:
+  - alias: TrueNAS alert notification
+    triggers:
+      - trigger: event
+        event_type: truenas_lightweight_alert
+        event_data:
+          action: raised
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.level not in ['INFO', 'NOTICE'] }}"
+    actions:
+      - action: notify.mobile_app_my_phone
+        data:
+          title: "TrueNAS {{ trigger.event.data.level | lower }}"
+          message: "{{ trigger.event.data.message }}"
+```
 
 ## Creating a read-only API key
 

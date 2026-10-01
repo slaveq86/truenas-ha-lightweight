@@ -1,0 +1,47 @@
+[
+  {
+    "id": 1,
+    "desc": "Photos to backup",
+    "path": "/mnt/tank/photos",
+    "mode": "SSH",
+    "remotehost": "backup.lan",
+    "remotepath": "/srv/photos",
+    "direction": "PUSH",
+    "enabled": true,
+    "job": {
+      "id": 501,
+      "state": "SUCCESS",
+      "error": null,
+      "time_started": {"$date": 1759300000000},
+      "time_finished": {"$date": 1759300600000}
+    }
+  },
+  {
+    "id": 2,
+    "desc": "",
+    "path": "/mnt/tank/docs",
+    "mode": "MODULE",
+    "remotehost": "nas2.lan",
+    "remotemodule": "docs",
+    "direction": "PULL",
+    "enabled": true,
+    "job": {
+      "id": 502,
+      "state": "FAILED",
+      "error": "rsync command returned 255. Check logs for further information.",
+      "time_started": {"$date": 1759300000000},
+      "time_finished": {"$date": 1759300060000}
+    }
+  },
+  {
+    "id": 3,
+    "desc": "Never run",
+    "path": "/mnt/tank/media",
+    "mode": "SSH",
+    "remotehost": "backup.lan",
+    "remotepath": "/srv/media",
+    "direction": "PUSH",
+    "enabled": false,
+    "job": null
+  }
+]

@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 
 from .coordinator import TrueNASConfigEntry
 
-TO_REDACT = {CONF_API_KEY, CONF_HOST, "hostname", "title", "unique_id"}
+TO_REDACT = {CONF_API_KEY, CONF_HOST, "hostname", "title", "unique_id", "remotehost", "path"}
 
 
 async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: TrueNASConfigEntry) -> dict[str, Any]:

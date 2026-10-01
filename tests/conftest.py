@@ -12,7 +12,7 @@ import pytest
 from homeassistant.const import CONF_API_KEY, CONF_HOST, CONF_PORT, CONF_VERIFY_SSL
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.truenas_lightweight.api import Alert, App, Pool, Stats, SystemInfo
+from custom_components.truenas_lightweight.api import Alert, App, Pool, Stats, SystemInfo, Task
 from custom_components.truenas_lightweight.const import DOMAIN
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -53,5 +53,11 @@ def mock_client() -> Generator[AsyncMock]:
         client.alerts.return_value = [Alert.from_api(a) for a in load_fixture("alert_list.json")]
         client.pools.return_value = {p["name"]: Pool.from_api(p) for p in load_fixture("pool_query.json")}
         client.apps.return_value = {a["name"]: App.from_api(a) for a in load_fixture("app_query.json")}
+        client.rsync_tasks.return_value = {
+            str(t["id"]): Task.from_rsync(t) for t in load_fixture("rsynctask_query.json")
+        }
+        client.snapshot_tasks.return_value = {
+            str(t["id"]): Task.from_snapshot(t) for t in load_fixture("snapshottask_query.json")
+        }
         client.realtime_stats.return_value = Stats.from_realtime(load_fixture("reporting_realtime.json"))
         yield client

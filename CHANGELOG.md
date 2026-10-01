@@ -8,6 +8,12 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
 
 ## [Unreleased]
 
+### Added
+
+- Rsync task entities: status, last run time and a problem binary sensor (with the error message) per task.
+- Periodic snapshot task entities: status, last run time and a problem binary sensor per task.
+- `truenas_lightweight_alert` event fired when an alert is raised or cleared, for per-alert notifications.
+
 ## [0.0.1] - 2026-10-01
 
 ### Added
