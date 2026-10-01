@@ -16,6 +16,8 @@ jobs:
       - uses: home-assistant/actions/hassfest@master
 
   hacs:
+    # HACS reads files via unauthenticated raw.githubusercontent.com, so it can only validate public repos.
+    if: ${{ github.event.repository.visibility == 'public' }}
     runs-on: ubuntu-latest
     steps:
       - uses: hacs/action@main
