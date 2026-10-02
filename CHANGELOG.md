@@ -19,11 +19,15 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
   services that TrueNAS doesn't start on boot are disabled by default.
 - Per-app CPU usage and memory sensors from the `app.stats` feed.
 - ECC memory diagnostic sensor and a `build_time` attribute on *Version*.
-- Example dashboard: Update tile, disk I/O and ARC gauges and graph, Network and Services sections, and CPU/memory
+- Example dashboard: update status, disk I/O and ARC gauges and graph, Network and Services groups, and CPU/memory
   columns in the apps table.
 
 ### Changed
 
+- Example dashboard layout: three independent columns instead of eight sections, so long lists no longer leave large
+  gaps between sections on desktop. Small values (version, last boot, RAM, load, disk read/write) are heading badges,
+  the alert list shows the 5 most severe, the data protection list the first 10 (problems first), services fit on
+  one line, and the per-pool gauges and load graph are gone (the pools table already shows usage).
 - The host device shows the hardware manufacturer, model, revision and serial number when the board reports them.
 - CPU usage is averaged over the update interval instead of being a single 2-second sample.
 - Diagnostics include services and the update status.

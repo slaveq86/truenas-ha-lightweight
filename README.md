@@ -100,10 +100,11 @@ automation:
 ## Dashboard
 
 [`examples/dashboard.yaml`](examples/dashboard.yaml) is a ready-made dashboard with health, alerts and the TrueNAS
-update, CPU/memory/load and disk I/O, and compact tables of network interfaces, pools, disks, apps (state, CPU, memory,
-version, updates), services and rsync/snapshot tasks that pick up new items automatically. The per-pool gauges and the
-disk temperature / network graphs need the [auto-entities](https://github.com/thomasloven/lovelace-auto-entities) card
-(HACS → Frontend). Host entity ids assume the hostname `truenas`; find/replace `sensor.truenas_` and
+update, CPU/memory/disk gauges and graphs, and compact lists of pools, disks, network interfaces, apps (state, CPU,
+memory, version, updates), services and rsync/snapshot tasks that pick up new items automatically. It is laid out as
+three independent columns, so a long alert or disk list doesn't leave gaps next to it; the alert and task lists are
+capped (problems first). The disk temperature and network graphs need the
+[auto-entities](https://github.com/thomasloven/lovelace-auto-entities) card (HACS → Frontend). Host entity ids assume the hostname `truenas`; find/replace `sensor.truenas_` and
 `binary_sensor.truenas_` if yours differs. Paste it via a new dashboard's **Edit → ⋮ → Raw configuration editor**.
 
 ## Creating a read-only API key

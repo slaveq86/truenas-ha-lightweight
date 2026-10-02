@@ -1,22 +1,29 @@
 # Example dashboard for the TrueNAS Lightweight integration.
 #
 # Requirements:
-#   - auto-entities (HACS → Frontend → "auto-entities") — draws a usage gauge per pool,
-#     the disk temperature and network throughput graphs, and shows the optional CPU
-#     temperature / ARC sensors. Pools, disks, network, apps, services and tasks tables
-#     are plain markdown cards that discover entities by device or attribute, so nothing
-#     below depends on pool, disk, interface, app, service or task names.
+#   - auto-entities (HACS → Frontend → "auto-entities") — draws the disk temperature and
+#     network throughput graphs, and shows the optional CPU temperature / ARC sensors.
+#     Pools, disks, network, apps, services and tasks lists are plain markdown cards that
+#     discover entities by device or attribute, so nothing below depends on pool, disk,
+#     interface, app, service or task names.
 #
 # Entity ids of the host assume the TrueNAS hostname "truenas"
-# (e.g. sensor.truenas_cpu_usage). If yours differs, find/replace "sensor.truenas_"
-# and "binary_sensor.truenas_" with your prefix.
+# (e.g. sensor.truenas_cpu_usage). If yours differs, find/replace "sensor.truenas_",
+# "binary_sensor.truenas_" and "update.truenas_" with your prefix.
 #
 # Usage: Settings → Dashboards → Add dashboard → open it → ⋮ → Edit dashboard →
 # ⋮ → Raw configuration editor → paste this file → Save.
 #
+# Layout: a sections view gives every section in a row the height of the tallest one,
+# so a long alert list or disk table would leave gaps under its neighbours. Instead,
+# each of the three sections below is one desktop column holding several groups,
+# and the columns grow independently (on phones they simply stack).
+#
 # CPU temperature and ZFS ARC size are disabled by default; they show up in the
-# System section once you enable them. Likewise, services that aren't set to start
-# on boot in TrueNAS are disabled in Home Assistant and left out of the Services list.
+# System group once you enable them. Likewise, services that aren't set to start on
+# boot in TrueNAS are disabled in Home Assistant and left out of the Services line.
+# The alert list and the data protection list are capped (problems first); change
+# `limit` at the top of their templates.
 
 title: TrueNAS
 views:
@@ -26,12 +33,24 @@ views:
     type: sections
     max_columns: 3
     sections:
-      # ── Overview ────────────────────────────────────────────────────────────
+      # ════ Column 1: health and system ═══════════════════════════════════════
       - type: grid
         cards:
           - type: heading
-            heading: Overview
+            heading: TrueNAS
             icon: mdi:nas
+            badges:
+              - type: entity
+                entity: sensor.truenas_version
+                icon: mdi:information-outline
+                show_state: true
+              - type: entity
+                entity: update.truenas_update
+                show_state: true
+              - type: entity
+                entity: sensor.truenas_last_boot
+                icon: mdi:restart
+                show_state: true
           - type: tile
             entity: binary_sensor.truenas_problem
             name: Health
@@ -39,26 +58,7 @@ views:
           - type: tile
             entity: sensor.truenas_highest_alert_level
             name: Alert level
-          - type: tile
-            entity: sensor.truenas_active_alerts
-            name: Active alerts
             icon: mdi:bell-alert
-          - type: tile
-            entity: sensor.truenas_apps_running
-            name: Apps running
-            icon: mdi:apps
-          - type: tile
-            entity: sensor.truenas_version
-            name: Version
-            icon: mdi:information-outline
-          - type: tile
-            entity: update.truenas_update
-            name: Update
-            icon: mdi:package-up
-          - type: tile
-            entity: sensor.truenas_last_boot
-            name: Last boot
-            icon: mdi:restart
           - type: conditional
             conditions:
               - condition: numeric_state
@@ -66,20 +66,47 @@ views:
                 above: 0
             card:
               type: markdown
-              title: Alerts
-              content: >-
-                {% set icons = {'EMERGENCY': '🟥', 'ALERT': '🟥', 'CRITICAL': '🟥', 'ERROR': '🟧',
-                'WARNING': '🟨', 'NOTICE': '🟦', 'INFO': '⬜'} %}
-                {% for a in state_attr('sensor.truenas_active_alerts', 'alerts') or [] %}
-                {{ icons.get(a.level, '⬜') }} **{{ a.level | title }}** — {{ a.message }}
-                {% endfor %}
+              content: |
+                {%- set limit = 5 %}
+                {%- set icons = {'EMERGENCY': '🟥', 'ALERT': '🟥', 'CRITICAL': '🟥', 'ERROR': '🟧',
+                    'WARNING': '🟨', 'NOTICE': '🟦', 'INFO': '⬜'} %}
+                {#- The attribute is already sorted by severity, worst first. #}
+                {%- set alerts = state_attr('sensor.truenas_active_alerts', 'alerts') or [] %}
+                {%- for a in alerts[:limit] %}
+                {{ icons.get(a.level, '⬜') }} {{ a.message | truncate(160) }}
+                {%- endfor %}
+                {%- if alerts | length > limit %}
 
-      # ── System ──────────────────────────────────────────────────────────────
-      - type: grid
-        cards:
+                *…and {{ alerts | length - limit }} more in TrueNAS*
+                {%- endif %}
+
           - type: heading
             heading: System
             icon: mdi:chip
+            badges:
+              - type: entity
+                entity: sensor.truenas_memory_used
+                name: RAM
+                show_state: true
+                state_content: [name, state]
+              - type: entity
+                entity: sensor.truenas_load_1_min
+                name: Load
+                icon: mdi:speedometer
+                show_state: true
+                state_content: [name, state]
+              - type: entity
+                entity: sensor.truenas_disk_read_rate
+                name: Read
+                icon: mdi:download
+                show_state: true
+                state_content: [name, state]
+              - type: entity
+                entity: sensor.truenas_disk_write_rate
+                name: Write
+                icon: mdi:upload
+                show_state: true
+                state_content: [name, state]
           - type: gauge
             entity: sensor.truenas_cpu_usage
             name: CPU
@@ -100,12 +127,6 @@ views:
               green: 0
               yellow: 80
               red: 95
-          - type: tile
-            entity: sensor.truenas_memory_used
-            name: Memory used
-          - type: tile
-            entity: sensor.truenas_memory_available
-            name: Memory available
           - type: gauge
             entity: sensor.truenas_disk_busy
             name: Disk busy
@@ -126,14 +147,6 @@ views:
               red: 0
               yellow: 70
               green: 90
-          - type: tile
-            entity: sensor.truenas_disk_read_rate
-            name: Disk read
-            icon: mdi:download
-          - type: tile
-            entity: sensor.truenas_disk_write_rate
-            name: Disk write
-            icon: mdi:upload
           # Only shown once the disabled-by-default sensors are enabled.
           - type: custom:auto-entities
             show_empty: false
@@ -163,16 +176,6 @@ views:
               - entity: sensor.truenas_memory_usage
                 name: Memory
           - type: history-graph
-            title: Load average
-            hours_to_show: 24
-            entities:
-              - entity: sensor.truenas_load_1_min
-                name: 1 min
-              - entity: sensor.truenas_load_5_min
-                name: 5 min
-              - entity: sensor.truenas_load_15_min
-                name: 15 min
-          - type: history-graph
             title: Disk throughput
             hours_to_show: 24
             entities:
@@ -181,11 +184,86 @@ views:
               - entity: sensor.truenas_disk_write_rate
                 name: Write
 
-      # ── Network ─────────────────────────────────────────────────────────────
-      # Interfaces come from the realtime feed and are found by their device (model).
-      # Rates are averaged over the update interval.
+      # ════ Column 2: storage, disks and network ══════════════════════════════
+      # Pools and interfaces are found by their device (model), disks by their "disk"
+      # attribute, so this also works with entity ids created by older versions.
       - type: grid
         cards:
+          - type: heading
+            heading: Storage
+            icon: mdi:database
+          - type: markdown
+            content: |
+              {%- set ns = namespace(rows=[]) %}
+              {%- for d in integration_entities('truenas_lightweight') | map('device_id') | reject('none') | unique %}
+              {%- if device_attr(d, 'model') == 'ZFS pool' %}
+              {%- set ents = device_entities(d) | reject('is_state', 'unavailable') | list %}
+              {%- set status = ents | select('is_state_attr', 'device_class', 'enum') | list %}
+              {%- set usage = ents | select('is_state_attr', 'unit_of_measurement', '%') | list %}
+              {%- set free = ents | select('is_state_attr', 'device_class', 'data_size') | list %}
+              {%- set problem = ents | select('is_state_attr', 'device_class', 'problem') | list %}
+              {%- if status %}
+              {%- set name = (device_attr(d, 'name_by_user') or device_attr(d, 'name')).split(' Pool ')[-1] %}
+              {%- set ns.rows = ns.rows + [{'name': name, 'status': status[0], 'usage': usage[0] if usage else none,
+                  'free': free[0] if free else none, 'problem': problem[0] if problem else none}] %}
+              {%- endif %}
+              {%- endif %}
+              {%- endfor %}
+              {%- if ns.rows %}
+              | | Pool | Status | Used | Free |
+              |:-:|:--|:--|:--|--:|
+              {%- for r in ns.rows | sort(attribute='name') %}
+              {%- set s = states(r.status) %}
+              {%- set icon = '⚠️' if r.problem and is_state(r.problem, 'on')
+                  else {'online': '🟢', 'degraded': '🟡'}.get(s, '🔴') %}
+              {%- set u = states(r.usage) | float(none) if r.usage else none %}
+              {%- set bar = '▰' * ((u / 10) | round(0, 'floor') | int) ~ '▱' * (10 - (u / 10) | round(0, 'floor') | int)
+                  if u is not none else '' %}
+              | {{ icon }} | **{{ r.name }}** | {{ state_translated(r.status) }} | {{ bar }} {{ u | round(0) | int ~ ' %' if u is not none else '—' }} | {{ states(r.free, rounded=True, with_unit=True) if r.free else '—' }} |
+              {%- endfor %}
+              {%- else %}
+              No pools found.
+              {%- endif %}
+
+          # Temperatures refresh every 5 min.
+          - type: heading
+            heading: Disks
+            icon: mdi:harddisk
+          - type: markdown
+            content: |
+              {%- set ns = namespace(rows=[]) %}
+              {%- for e in integration_entities('truenas_lightweight') | select('is_state_attr', 'device_class', 'temperature') %}
+              {%- if state_attr(e, 'disk') and not is_state(e, 'unavailable') %}
+              {%- set ns.rows = ns.rows + [{'e': e, 'disk': state_attr(e, 'disk'), 'pool': state_attr(e, 'pool') or '—'}] %}
+              {%- endif %}
+              {%- endfor %}
+              {%- if ns.rows %}
+              | | Disk | Model | Pool | Temp |
+              |:-:|:--|:--|:--|--:|
+              {%- for r in ns.rows | sort(attribute='disk') | sort(attribute='pool') %}
+              {%- set t = states(r.e) | float(none) %}
+              {#- SSDs/NVMe run hotter than spinning disks. #}
+              {%- set warm, hot = (50, 70) if state_attr(r.e, 'type') == 'SSD' else (40, 50) %}
+              {%- set icon = '❔' if t is none else '🟢' if t < warm else '🟡' if t < hot else '🔴' %}
+              | {{ icon }} | **{{ r.disk }}** | {{ (state_attr(r.e, 'model') or '—') | replace('|', '/') }} | {{ r.pool }} | {{ states(r.e, rounded=True, with_unit=True) if t is not none else '—' }} |
+              {%- endfor %}
+              {%- else %}
+              No disks found.
+              {%- endif %}
+          - type: custom:auto-entities
+            show_empty: false
+            card:
+              type: history-graph
+              title: Disk temperatures
+              hours_to_show: 24
+            filter:
+              include:
+                - integration: truenas_lightweight
+                  entity_id: sensor.*_disk_*_temperature
+            sort:
+              method: name
+
+          # Interfaces come from the realtime feed; rates are averaged over the update interval.
           - type: heading
             heading: Network
             icon: mdi:lan
@@ -234,111 +312,7 @@ views:
             sort:
               method: name
 
-      # ── Storage ─────────────────────────────────────────────────────────────
-      # Pools, apps and tasks are found by their device (model), not by entity id,
-      # so this also works with entity ids created by older versions.
-      - type: grid
-        cards:
-          - type: heading
-            heading: Storage
-            icon: mdi:database
-          - type: custom:auto-entities
-            card:
-              type: grid
-              columns: 2
-              square: false
-            card_param: cards
-            filter:
-              include:
-                - integration: truenas_lightweight
-                  entity_id: sensor.*_pool_*_usage
-                  options:
-                    type: gauge
-                    needle: true
-                    min: 0
-                    max: 100
-                    severity:
-                      green: 0
-                      yellow: 80
-                      red: 90
-            sort:
-              method: name
-          - type: markdown
-            content: |
-              {%- set ns = namespace(rows=[]) %}
-              {%- for d in integration_entities('truenas_lightweight') | map('device_id') | reject('none') | unique %}
-              {%- if device_attr(d, 'model') == 'ZFS pool' %}
-              {%- set ents = device_entities(d) | reject('is_state', 'unavailable') | list %}
-              {%- set status = ents | select('is_state_attr', 'device_class', 'enum') | list %}
-              {%- set usage = ents | select('is_state_attr', 'unit_of_measurement', '%') | list %}
-              {%- set free = ents | select('is_state_attr', 'device_class', 'data_size') | list %}
-              {%- set problem = ents | select('is_state_attr', 'device_class', 'problem') | list %}
-              {%- if status %}
-              {%- set name = (device_attr(d, 'name_by_user') or device_attr(d, 'name')).split(' Pool ')[-1] %}
-              {%- set ns.rows = ns.rows + [{'name': name, 'status': status[0], 'usage': usage[0] if usage else none,
-                  'free': free[0] if free else none, 'problem': problem[0] if problem else none}] %}
-              {%- endif %}
-              {%- endif %}
-              {%- endfor %}
-              {%- if ns.rows %}
-              | | Pool | Status | Used | Free |
-              |:-:|:--|:--|:--|--:|
-              {%- for r in ns.rows | sort(attribute='name') %}
-              {%- set s = states(r.status) %}
-              {%- set icon = '⚠️' if r.problem and is_state(r.problem, 'on')
-                  else {'online': '🟢', 'degraded': '🟡'}.get(s, '🔴') %}
-              {%- set u = states(r.usage) | float(none) if r.usage else none %}
-              {%- set bar = '▰' * ((u / 10) | round(0, 'floor') | int) ~ '▱' * (10 - (u / 10) | round(0, 'floor') | int)
-                  if u is not none else '' %}
-              | {{ icon }} | **{{ r.name }}** | {{ state_translated(r.status) }} | {{ bar }} {{ u | round(0) | int ~ ' %' if u is not none else '—' }} | {{ states(r.free, rounded=True, with_unit=True) if r.free else '—' }} |
-              {%- endfor %}
-              {%- else %}
-              No pools found.
-              {%- endif %}
-
-      # ── Disks ───────────────────────────────────────────────────────────────
-      # Disk temperature sensors are found by their "disk" attribute, so this works
-      # whichever device (pool or host) a disk sits on. Temperatures refresh every 5 min.
-      - type: grid
-        cards:
-          - type: heading
-            heading: Disks
-            icon: mdi:harddisk
-          - type: markdown
-            content: |
-              {%- set ns = namespace(rows=[]) %}
-              {%- for e in integration_entities('truenas_lightweight') | select('is_state_attr', 'device_class', 'temperature') %}
-              {%- if state_attr(e, 'disk') and not is_state(e, 'unavailable') %}
-              {%- set ns.rows = ns.rows + [{'e': e, 'disk': state_attr(e, 'disk'), 'pool': state_attr(e, 'pool') or '—'}] %}
-              {%- endif %}
-              {%- endfor %}
-              {%- if ns.rows %}
-              | | Disk | Model | Pool | Temp |
-              |:-:|:--|:--|:--|--:|
-              {%- for r in ns.rows | sort(attribute='disk') | sort(attribute='pool') %}
-              {%- set t = states(r.e) | float(none) %}
-              {#- SSDs/NVMe run hotter than spinning disks. #}
-              {%- set warm, hot = (50, 70) if state_attr(r.e, 'type') == 'SSD' else (40, 50) %}
-              {%- set icon = '❔' if t is none else '🟢' if t < warm else '🟡' if t < hot else '🔴' %}
-              | {{ icon }} | **{{ r.disk }}** | {{ (state_attr(r.e, 'model') or '—') | replace('|', '/') }} | {{ r.pool }} | {{ states(r.e, rounded=True, with_unit=True) if t is not none else '—' }} |
-              {%- endfor %}
-              {%- else %}
-              No disks found.
-              {%- endif %}
-          - type: custom:auto-entities
-            show_empty: false
-            card:
-              type: history-graph
-              title: Disk temperatures
-              hours_to_show: 24
-            filter:
-              include:
-                - integration: truenas_lightweight
-                  entity_id: sensor.*_disk_*_temperature
-            sort:
-              method: name
-
-      # ── Apps ────────────────────────────────────────────────────────────────
+      # ════ Column 3: apps, services and data protection ══════════════════════
       - type: grid
         cards:
           - type: heading
@@ -347,9 +321,8 @@ views:
             badges:
               - type: entity
                 entity: sensor.truenas_apps_running
-                show_state: true
-                show_icon: true
                 icon: mdi:play-circle
+                show_state: true
           - type: markdown
             content: |
               {%- set ns = namespace(rows=[], updates=0) %}
@@ -373,59 +346,47 @@ views:
               {%- if ns.updates %}
               **⬆️ {{ ns.updates }} update{{ 's' if ns.updates > 1 }} available**
               {% endif %}
-              | | App | State | CPU | Memory | Version | |
-              |:-:|:--|:--|--:|--:|:--|:-:|
+              | | App | CPU | Memory | Version | |
+              |:-:|:--|--:|--:|:--|:-:|
               {%- for r in ns.rows | sort(attribute='name') %}
               {%- set s = states(r.e) %}
               {%- set icon = {'running': '🟢', 'deploying': '🟡', 'stopping': '🟡', 'stopped': '⚪', 'crashed': '🔴'}.get(s, '❔') %}
               {#- Usage comes from the app.stats feed; stopped apps report 0. #}
               {%- set cpu = states(r.cpu, rounded=True, with_unit=True) if s == 'running' and has_value(r.cpu) else '—' %}
               {%- set mem = states(r.mem, rounded=True, with_unit=True) if s == 'running' and has_value(r.mem) else '—' %}
-              | {{ icon }} | **{{ r.name }}** | {{ state_translated(r.e) }} | {{ cpu }} | {{ mem }} | {{ state_attr(r.e, 'version') or '—' }} | {{ '⬆️' if r.upd }} |
+              | {{ icon }} | **{{ r.name }}** | {{ cpu }} | {{ mem }} | {{ state_attr(r.e, 'version') or '—' }} | {{ '⬆️' if r.upd }} |
               {%- endfor %}
               {%- else %}
               No apps found.
               {%- endif %}
 
-      # ── Services ────────────────────────────────────────────────────────────
-      # 🔴 = set to start on boot in TrueNAS but not running.
-      - type: grid
-        cards:
+          # 🟢 running · 🔴 set to start on boot but not running · ⚪ stopped
           - type: heading
             heading: Services
             icon: mdi:cog-play
           - type: markdown
             content: |
-              {%- set ns = namespace(rows=[]) %}
+              {%- set ns = namespace(items=[]) %}
               {%- for d in integration_entities('truenas_lightweight') | map('device_id') | reject('none') | unique %}
               {%- if device_attr(d, 'model') == 'Services' %}
               {%- set dn = (device_attr(d, 'name_by_user') or device_attr(d, 'name')) ~ ' ' %}
               {#- Disabled entities (services not started on boot) have no state and are skipped. #}
               {%- for e in device_entities(d) | select('has_value') %}
               {%- set fn = state_attr(e, 'friendly_name') %}
-              {%- set ns.rows = ns.rows + [{'name': fn[dn | length:] if fn.startswith(dn) else fn, 'e': e}] %}
+              {%- set icon = '🟢' if is_state(e, 'on') else '🔴' if state_attr(e, 'enabled') else '⚪' %}
+              {%- set ns.items = ns.items + [{'name': fn[dn | length:] if fn.startswith(dn) else fn, 'icon': icon}] %}
               {%- endfor %}
               {%- endif %}
               {%- endfor %}
-              {%- if ns.rows %}
-              | | Service | State |
-              |:-:|:--|:--|
-              {%- for r in ns.rows | sort(attribute='name') %}
-              {%- set icon = '🟢' if is_state(r.e, 'on') else '🔴' if state_attr(r.e, 'enabled') else '⚪' %}
-              | {{ icon }} | **{{ r.name }}** | {{ state_translated(r.e) }} |
-              {%- endfor %}
-              {%- else %}
-              No services found.
-              {%- endif %}
+              {%- for i in ns.items | sort(attribute='name') %}{{ i.icon }} **{{ i.name }}**{{ ' · ' if not loop.last }}{% endfor %}
+              {%- if not ns.items %}No services found.{% endif %}
 
-      # ── Data protection ─────────────────────────────────────────────────────
-      - type: grid
-        cards:
           - type: heading
             heading: Data protection
             icon: mdi:shield-sync
           - type: markdown
             content: |
+              {%- set limit = 10 %}
               {%- set ns = namespace(rows=[], failing=0) %}
               {%- for d in integration_entities('truenas_lightweight') | map('device_id') | reject('none') | unique %}
               {%- if device_attr(d, 'model') == 'Data protection' %}
@@ -438,7 +399,8 @@ views:
               {%- set base = e.split('.', 1)[1][:-7] %}
               {%- set bad = is_state('binary_sensor.' ~ base ~ '_problem', 'on') %}
               {%- set ns.failing = ns.failing + (1 if bad else 0) %}
-              {%- set ns.rows = ns.rows + [{'name': name, 'e': e, 'last': 'sensor.' ~ base ~ '_last_run', 'bad': bad}] %}
+              {%- set ns.rows = ns.rows + [{'name': name, 'e': e, 'last': 'sensor.' ~ base ~ '_last_run',
+                  'bad': bad, 'rank': 0 if bad else 1}] %}
               {%- endfor %}
               {%- endif %}
               {%- endfor %}
@@ -448,7 +410,8 @@ views:
               {% endif %}
               | | Task | Status | Last run |
               |:-:|:--|:--|:--|
-              {%- for r in ns.rows | sort(attribute='name') %}
+              {#- Problems first, so the cap only ever hides healthy tasks (unless more than `limit` fail). #}
+              {%- for r in (ns.rows | sort(attribute='rank,name'))[:limit] %}
               {%- set s = states(r.e) %}
               {%- set icon = '⏸️' if state_attr(r.e, 'enabled') == false
                   else '⚠️' if r.bad
@@ -457,6 +420,10 @@ views:
               {%- set t = as_datetime(states(r.last)) %}
               | {{ icon }} | **{{ r.name }}** | {{ state_translated(r.e) }} | {{ relative_time(t) ~ ' ago' if t else 'never' }} |
               {%- endfor %}
+              {%- if ns.rows | length > limit %}
+
+              *…and {{ ns.rows | length - limit }} more*
+              {%- endif %}
               {%- else %}
               No rsync or snapshot tasks found.
               {%- endif %}
