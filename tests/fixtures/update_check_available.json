@@ -1,0 +1,24 @@
+{
+  "status": "AVAILABLE",
+  "changes": [
+    {
+      "operation": "upgrade",
+      "old": {
+        "name": "TrueNAS",
+        "version": "25.04.2"
+      },
+      "new": {
+        "name": "TrueNAS",
+        "version": "25.04.3"
+      }
+    }
+  ],
+  "notice": null,
+  "notes": null,
+  "release_notes_url": "https://www.truenas.com/docs/scale/25.04/gettingstarted/scalereleasenotes/#25043-changelog",
+  "changelog": "",
+  "version": "25.04.3",
+  "filename": "TrueNAS-SCALE-25.04.3.update",
+  "filesize": 1612345344,
+  "checksum": "0d7a1f6c3b2e4f5a6b7c8d9e0f1a2b3c"
+}

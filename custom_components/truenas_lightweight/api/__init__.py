@@ -5,17 +5,38 @@ from .exceptions import (
     TrueNASAuthError,
     TrueNASConnectionError,
     TrueNASError,
+    TrueNASMethodNotFoundError,
     TrueNASPermissionError,
 )
-from .models import ALERT_LEVELS, TASK_STATES, Alert, App, Disk, Pool, Stats, SystemInfo, Task, TrueNASData
+from .models import (
+    ALERT_LEVELS,
+    TASK_STATES,
+    Alert,
+    App,
+    AppStats,
+    Disk,
+    Interface,
+    Pool,
+    RealtimeSample,
+    Service,
+    Stats,
+    SystemInfo,
+    Task,
+    TrueNASData,
+    UpdateInfo,
+)
 
 __all__ = [
     "ALERT_LEVELS",
     "TASK_STATES",
     "Alert",
     "App",
+    "AppStats",
     "Disk",
+    "Interface",
     "Pool",
+    "RealtimeSample",
+    "Service",
     "Stats",
     "SystemInfo",
     "Task",
@@ -24,5 +45,7 @@ __all__ = [
     "TrueNASConnectionError",
     "TrueNASData",
     "TrueNASError",
+    "TrueNASMethodNotFoundError",
     "TrueNASPermissionError",
+    "UpdateInfo",
 ]

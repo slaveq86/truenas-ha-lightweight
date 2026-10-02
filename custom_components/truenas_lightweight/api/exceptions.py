@@ -17,3 +17,7 @@ class TrueNASAuthError(TrueNASError):
 
 class TrueNASPermissionError(TrueNASError):
     """API key's user lacks the role required for a method (EACCES)."""
+
+
+class TrueNASMethodNotFoundError(TrueNASError):
+    """The method doesn't exist on this TrueNAS release (JSON-RPC -32601)."""

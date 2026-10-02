@@ -8,6 +8,30 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
 
 ## [Unreleased]
 
+### Added
+
+- Network interface entities on a new *Network* device: download and upload rate, and a link sensor with the link
+  speed, from the realtime feed.
+- Disk read/write rate, disk busy and ZFS ARC hit ratio sensors.
+- Read-only *Update* entity for TrueNAS itself (no install button). It checks every 6 hours and right after the
+  version changes, using `update.status` on 25.10+ and `update.check_available` on 25.04.
+- Service sensors (SMB, NFS, SSH, …) on a new *Services* device. They show whether each service is running, and
+  services that TrueNAS doesn't start on boot are disabled by default.
+- Per-app CPU usage and memory sensors from the `app.stats` feed.
+- ECC memory diagnostic sensor and a `build_time` attribute on *Version*.
+- Example dashboard: update status, disk I/O and ARC gauges and graph, Network and Services groups, and CPU/memory
+  columns in the apps table.
+
+### Changed
+
+- Example dashboard layout: three independent columns instead of eight sections, so long lists no longer leave large
+  gaps between sections on desktop. Small values (version, last boot, RAM, load, disk read/write) are heading badges,
+  the alert list shows the 5 most severe, the data protection list the first 10 (problems first), services fit on
+  one line, and the per-pool gauges and load graph are gone (the pools table already shows usage).
+- The host device shows the hardware manufacturer, model, revision and serial number when the board reports them.
+- CPU usage is averaged over the update interval instead of being a single 2-second sample.
+- Diagnostics include services and the update status.
+
 ## [0.2.0] - 2026-10-01
 
 ### Added

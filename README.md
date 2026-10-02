@@ -14,20 +14,27 @@ Entities are grouped into devices; the child devices show as *connected via* the
 
 | Device | Entities |
 |---|---|
-| *hostname* (the TrueNAS host) | system, alert and overall problem entities |
+| *hostname* (the TrueNAS host) | system, disk I/O, alert, update and overall problem entities; shows the hardware manufacturer, model and serial |
 | *hostname* Pool *name* (one per pool) | pool status, usage, free space, problem |
-| *hostname* Apps | apps running, and state + update per app |
+| *hostname* Apps | apps running, and state, CPU, memory + update per app |
 | *hostname* Data protection | rsync and periodic snapshot tasks |
+| *hostname* Network | download, upload and link per network interface |
+| *hostname* Services | one running sensor per TrueNAS service (SMB, NFS, SSH, …) |
 
 | Entity | Device | Type | Notes |
 |---|---|---|---|
-| CPU usage | host | sensor (%) | from the `reporting.realtime` feed |
+| CPU usage | host | sensor (%) | from the `reporting.realtime` feed, averaged over the update interval |
 | CPU temperature | host | sensor (°C) | disabled by default; not available on every host |
 | Memory usage / used / available | host | sensor (%, GiB) | |
 | ZFS ARC size | host | sensor (GiB) | disabled by default |
+| ZFS ARC hit ratio | host | sensor (%) | share of ARC reads served from memory; keeps its value while the pool is idle |
+| Disk read rate / write rate | host | sensor (MB/s) | all disks combined |
+| Disk busy | host | sensor (%) | average share of time the disks were busy |
+| ECC memory | host | binary sensor | diagnostic |
 | Load (1/5/15 min) | host | sensor | |
 | Last boot | host | timestamp | diagnostic |
-| Version | host | sensor | diagnostic |
+| Version | host | sensor | diagnostic; `build_time` attribute |
+| Update | host | update | newer TrueNAS release on the configured train; read-only (no install button), checked every 6 h and right after the version changes |
 | Active alerts | host | sensor (count) | `alerts` attribute lists level, class and message |
 | Highest alert level | host | enum sensor | `ok`, `info` … `emergency` |
 | Problem | host | binary sensor | on when any active alert is WARNING or worse |
@@ -37,12 +44,16 @@ Entities are grouped into devices; the child devices show as *connected via* the
 | Running | Apps | sensor (count) | number of running apps |
 | *app* state | Apps | enum sensor | `running`, `deploying`, `stopping`, `stopped`, `crashed` |
 | *app* update | Apps | binary sensor | on when a newer catalog version is available |
+| *app* CPU usage / memory | Apps | sensor (%, MiB) | from the `app.stats` feed; 0 for stopped apps |
+| *interface* download / upload | Network | sensor (Mbit/s) | averaged over the update interval |
+| *interface* link | Network | binary sensor | on while the link is up; `speed_mbps` attribute |
+| *service* | Services | binary sensor | on while running; `enabled` attribute (start on boot). Services not set to start on boot are disabled by default |
 | Rsync *task* status | Data protection | enum sensor | `pending`, `waiting`, `running`, `success`, `failed`, `aborted`, `hold`; attributes: direction, path, remote, error |
 | Rsync *task* last run | Data protection | timestamp | when the last run finished |
 | Rsync *task* problem | Data protection | binary sensor | on when the last run failed or was aborted, or the task is on hold; `error` attribute |
 | Snapshot *dataset (retention)* status / last run / problem | Data protection | as above | periodic snapshot tasks; attributes: naming schema, lifetime |
 
-New pools, apps and tasks are picked up automatically; removed ones become unavailable (the device of a deleted pool
+New pools, apps, tasks, interfaces and services are picked up automatically; removed ones become unavailable (the device of a deleted pool
 can then be deleted from its device page). Rsync tasks are named after
 their description (or path if empty), snapshot tasks after their dataset and retention, e.g.
 *Snapshot tank/photos (recursive, 2 weeks) status*, so several tasks on one dataset stay distinguishable.
@@ -88,10 +99,12 @@ automation:
 
 ## Dashboard
 
-[`examples/dashboard.yaml`](examples/dashboard.yaml) is a ready-made dashboard with health and alerts, CPU/memory/load,
-and compact tables of pools, apps (state, version, updates) and rsync/snapshot tasks that pick up new items
-automatically. The per-pool gauges need the [auto-entities](https://github.com/thomasloven/lovelace-auto-entities) card
-(HACS → Frontend). Host entity ids assume the hostname `truenas`; find/replace `sensor.truenas_` and
+[`examples/dashboard.yaml`](examples/dashboard.yaml) is a ready-made dashboard with health, alerts and the TrueNAS
+update, CPU/memory/disk gauges and graphs, and compact lists of pools, disks, network interfaces, apps (state, CPU,
+memory, version, updates), services and rsync/snapshot tasks that pick up new items automatically. It is laid out as
+three independent columns, so a long alert or disk list doesn't leave gaps next to it; the alert and task lists are
+capped (problems first). The disk temperature and network graphs need the
+[auto-entities](https://github.com/thomasloven/lovelace-auto-entities) card (HACS → Frontend). Host entity ids assume the hostname `truenas`; find/replace `sensor.truenas_` and
 `binary_sensor.truenas_` if yours differs. Paste it via a new dashboard's **Edit → ⋮ → Raw configuration editor**.
 
 ## Creating a read-only API key
@@ -126,6 +139,11 @@ Copy `custom_components/truenas_lightweight` into your Home Assistant `config/cu
 | API key | — | key of the read-only user |
 
 Options: **Update interval** (10–600 s, default 30 s).
+
+The integration keeps two push subscriptions open on its connection: `reporting.realtime` (CPU, memory, network, disk
+I/O, ARC) and `app.stats` (per-app CPU/memory). Disk temperatures are read every 5 minutes. The update check runs every
+6 hours: on TrueNAS 25.10+ it reads `update.status`, while on 25.04 it calls `update.check_available`, which makes
+TrueNAS ask the iX update server.
 
 If the key is revoked, Home Assistant asks you to re-authenticate. If the user lacks permission for some calls (e.g. apps), those entities are skipped and a warning is logged instead of failing the whole integration.
 

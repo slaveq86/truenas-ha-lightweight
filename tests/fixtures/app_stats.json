@@ -1,0 +1,28 @@
+[
+  {
+    "app_name": "plex",
+    "cpu_usage": 3.5,
+    "memory": 536870912,
+    "networks": [
+      {
+        "interface_name": "eth0",
+        "rx_bytes": 1024,
+        "tx_bytes": 2048
+      }
+    ],
+    "blkio": {
+      "read": 0,
+      "write": 4096
+    }
+  },
+  {
+    "app_name": "nextcloud",
+    "memory": 0,
+    "cpu_usage": 0,
+    "networks": [],
+    "blkio": {
+      "read": 0,
+      "write": 0
+    }
+  }
+]

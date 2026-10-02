@@ -31,8 +31,9 @@ TO_REDACT = {
     "pool",
 }
 
-# async_redact_data only redacts values, and these are keyed by pool/app name, disk serial (tasks by id).
-KEYED_BY_NAME = ("pools", "apps", "rsync_tasks", "snapshot_tasks", "disks")
+# async_redact_data only redacts values, and these are keyed by pool/app name, disk serial (tasks by id, services by
+# their fixed name). Interface names (stats.interfaces) don't identify a setup and stay keyed.
+KEYED_BY_NAME = ("pools", "apps", "rsync_tasks", "snapshot_tasks", "disks", "services")
 
 
 async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: TrueNASConfigEntry) -> dict[str, Any]:
