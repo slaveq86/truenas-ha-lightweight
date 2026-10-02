@@ -11,7 +11,7 @@ from .api import TrueNASClient
 from .const import DOMAIN
 from .coordinator import TrueNASConfigEntry, TrueNASCoordinator
 
-PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR, Platform.UPDATE]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: TrueNASConfigEntry) -> bool:

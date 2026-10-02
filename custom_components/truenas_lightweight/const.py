@@ -21,3 +21,11 @@ MAX_SCAN_INTERVAL = 600
 # disk.temperatures reads every disk's sensor (SMART/drivetemp); polling it each scan is wasteful and can keep HDDs
 # from spinning down, so disks are refreshed on this slower cadence.
 DISK_INTERVAL = timedelta(minutes=5)
+
+# 25.04's update.check_available asks the iX update server, so the update status is checked on this slow cadence
+# (and right after the installed version changes); a failed or inconclusive check is retried sooner.
+UPDATE_INTERVAL = timedelta(hours=6)
+UPDATE_RETRY = timedelta(minutes=30)
+
+# How often to subscribe again to a push feed that delivers nothing (e.g. app.stats while Docker was down).
+RESUBSCRIBE_INTERVAL = timedelta(minutes=5)

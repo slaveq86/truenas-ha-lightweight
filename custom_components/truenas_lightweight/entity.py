@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from yarl import URL
 
-from .api import Task, TrueNASData
+from .api import Interface, Task, TrueNASData
 from .const import DOMAIN
 from .coordinator import TrueNASCoordinator
 
@@ -24,7 +24,7 @@ def child_device(
     model: str,
     placeholders: dict[str, str] | None = None,
 ) -> DeviceInfo:
-    """A device shown as connected via the TrueNAS host (pool, apps, data protection)."""
+    """A device shown as connected via the TrueNAS host (pool, apps, data protection, network, services)."""
     host_id = coordinator.config_entry.unique_id
     return DeviceInfo(
         identifiers={(DOMAIN, f"{host_id}_{suffix}")},
@@ -48,6 +48,14 @@ def data_protection_device(coordinator: TrueNASCoordinator) -> DeviceInfo:
     return child_device(coordinator, "data_protection", "data_protection", "Data protection")
 
 
+def network_device(coordinator: TrueNASCoordinator) -> DeviceInfo:
+    return child_device(coordinator, "network", "network", "Network")
+
+
+def services_device(coordinator: TrueNASCoordinator) -> DeviceInfo:
+    return child_device(coordinator, "services", "services", "Services")
+
+
 class TrueNASEntity(CoordinatorEntity[TrueNASCoordinator]):
     """Entities sit on the TrueNAS host device unless given a child device."""
 
@@ -61,8 +69,11 @@ class TrueNASEntity(CoordinatorEntity[TrueNASCoordinator]):
         self._attr_device_info = device or DeviceInfo(
             identifiers={(DOMAIN, entry.unique_id)},
             name=system.hostname,
-            manufacturer="iXsystems",
+            # Hardware vendor/model/serial from DMI; generic boards often leave them as placeholders.
+            manufacturer=system.manufacturer or "iXsystems",
             model=system.model or "TrueNAS",
+            hw_version=system.product_version,
+            serial_number=system.serial,
             sw_version=system.version,
             configuration_url=str(URL.build(scheme="https", host=entry.data[CONF_HOST], port=entry.data[CONF_PORT])),
         )
@@ -94,13 +105,35 @@ class TrueNASTaskEntity(TrueNASEntity):
         return super().available and self._task_id in task_items(self.coordinator.data, self._kind)
 
 
+def interface_items(data: TrueNASData) -> dict[str, Interface]:
+    """Network interfaces from the realtime feed (none while it is missing)."""
+    return data.stats.interfaces if data.stats else {}
+
+
+class TrueNASInterfaceEntity(TrueNASEntity):
+    """Entity bound to one network interface; unavailable while realtime stats are missing or it is gone."""
+
+    def __init__(self, coordinator: TrueNASCoordinator, key: str, name: str) -> None:
+        super().__init__(coordinator, f"interface_{name}_{key}", network_device(coordinator))
+        self._name = name
+        self._attr_translation_placeholders = {"interface": name}
+
+    @property
+    def interface(self) -> Interface:
+        return interface_items(self.coordinator.data)[self._name]
+
+    @property
+    def available(self) -> bool:
+        return super().available and self._name in interface_items(self.coordinator.data)
+
+
 def async_track_items(
     coordinator: TrueNASCoordinator,
     items_fn: Callable[[TrueNASData], Iterable[str]],
     entities_fn: Callable[[str], Iterable[Entity]],
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add entities for pools/apps/tasks now and whenever new ones appear."""
+    """Add entities for pools/apps/tasks/disks/interfaces/services now and whenever new ones appear."""
     known: set[str] = set()
 
     @callback

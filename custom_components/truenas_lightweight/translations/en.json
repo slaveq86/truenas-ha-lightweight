@@ -55,6 +55,12 @@
     },
     "data_protection": {
       "name": "{host} Data protection"
+    },
+    "network": {
+      "name": "{host} Network"
+    },
+    "services": {
+      "name": "{host} Services"
     }
   },
   "entity": {
@@ -73,6 +79,15 @@
       },
       "snapshot_problem": {
         "name": "Snapshot {task} problem"
+      },
+      "ecc_memory": {
+        "name": "ECC memory"
+      },
+      "interface_link": {
+        "name": "{interface} link"
+      },
+      "service": {
+        "name": "{service}"
       }
     },
     "sensor": {
@@ -93,6 +108,18 @@
       },
       "arc_size": {
         "name": "ZFS ARC size"
+      },
+      "arc_hit_ratio": {
+        "name": "ZFS ARC hit ratio"
+      },
+      "disk_read_rate": {
+        "name": "Disk read rate"
+      },
+      "disk_write_rate": {
+        "name": "Disk write rate"
+      },
+      "disk_busy": {
+        "name": "Disk busy"
       },
       "load_1": {
         "name": "Load (1 min)"
@@ -158,6 +185,18 @@
           "crashed": "Crashed"
         }
       },
+      "app_cpu_usage": {
+        "name": "{app} CPU usage"
+      },
+      "app_memory": {
+        "name": "{app} memory"
+      },
+      "interface_download": {
+        "name": "{interface} download"
+      },
+      "interface_upload": {
+        "name": "{interface} upload"
+      },
       "rsync_status": {
         "name": "Rsync {task} status",
         "state": {
@@ -187,6 +226,11 @@
       },
       "snapshot_last_run": {
         "name": "Snapshot {task} last run"
+      }
+    },
+    "update": {
+      "system_update": {
+        "name": "Update"
       }
     }
   }

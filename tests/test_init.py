@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from datetime import timedelta
 from unittest.mock import AsyncMock
@@ -23,9 +24,12 @@ from custom_components.truenas_lightweight import async_remove_config_entry_devi
 from custom_components.truenas_lightweight.api import (
     Alert,
     App,
+    Interface,
+    Service,
     TrueNASAuthError,
     TrueNASConnectionError,
     TrueNASPermissionError,
+    UpdateInfo,
 )
 from custom_components.truenas_lightweight.const import DOMAIN, EVENT_ALERT
 from custom_components.truenas_lightweight.diagnostics import async_get_config_entry_diagnostics
@@ -36,7 +40,8 @@ from .conftest import HOST_ID
 async def _setup(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     entry.add_to_hass(hass)
     await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    # The update check runs as a background task.
+    await hass.async_block_till_done(wait_background_tasks=True)
 
 
 async def _tick(hass: HomeAssistant) -> None:
@@ -126,14 +131,237 @@ async def test_entities(hass: HomeAssistant, mock_client: AsyncMock, mock_config
     assert er.async_get(hass).async_get("sensor.truenas_cpu_temperature").disabled_by is not None
 
 
+async def test_new_entities(hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry) -> None:
+    await _setup(hass, mock_config_entry)
+    expected = {
+        "sensor.truenas_zfs_arc_hit_ratio": "95.0",
+        "sensor.truenas_disk_busy": "12.5",
+        "binary_sensor.truenas_ecc_memory": STATE_ON,
+        "sensor.truenas_apps_plex_cpu_usage": "3.5",
+        "sensor.truenas_apps_nextcloud_cpu_usage": "0.0",
+        "binary_sensor.truenas_network_enp5s0_link": STATE_ON,
+        "binary_sensor.truenas_network_enp6s0_link": STATE_OFF,
+        "binary_sensor.truenas_services_smb": STATE_ON,
+        "binary_sensor.truenas_services_ssh": STATE_ON,
+        "binary_sensor.truenas_services_nfs": STATE_OFF,
+        "update.truenas_update": STATE_ON,
+    }
+    for entity_id, state in expected.items():
+        assert (s := hass.states.get(entity_id)) is not None, entity_id
+        assert s.state == state, entity_id
+
+    def value(entity_id: str) -> tuple[float, str]:
+        state = hass.states.get(entity_id)
+        return float(state.state), state.attributes["unit_of_measurement"]
+
+    assert value("sensor.truenas_disk_read_rate") == (10.48576, "MB/s")
+    assert value("sensor.truenas_network_enp5s0_download") == (10.0, "Mbit/s")
+    assert value("sensor.truenas_network_enp5s0_upload") == (2.0, "Mbit/s")
+    assert value("sensor.truenas_apps_plex_memory") == (512.0, "MiB")
+    assert hass.states.get("binary_sensor.truenas_network_enp5s0_link").attributes["speed_mbps"] == 1000
+    assert hass.states.get("binary_sensor.truenas_services_nfs").attributes["enabled"] is True
+    assert "version" not in hass.states.get("sensor.truenas_apps_plex_cpu_usage").attributes
+    assert hass.states.get("sensor.truenas_version").attributes["build_time"] == "2025-07-28T10:53:20+00:00"
+
+    update = hass.states.get("update.truenas_update").attributes
+    assert (update["installed_version"], update["latest_version"]) == ("25.04.2", "25.04.3")
+    assert update["release_url"].endswith("#25043-changelog")
+    # Read-only: nothing can be installed from Home Assistant.
+    assert update["supported_features"] == 0
+
+    entities = er.async_get(hass)
+    assert entities.async_get("binary_sensor.truenas_services_smb").unique_id == f"{HOST_ID}_service_cifs"
+    assert (
+        entities.async_get("sensor.truenas_network_enp5s0_download").unique_id == f"{HOST_ID}_interface_enp5s0_download"
+    )
+    assert entities.async_get("sensor.truenas_apps_plex_memory").unique_id == f"{HOST_ID}_app_plex_memory"
+    # Services that don't start on boot in TrueNAS are disabled by default.
+    assert entities.async_get("binary_sensor.truenas_services_ftp").disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert entities.async_get("binary_sensor.truenas_services_smb").disabled_by is None
+
+
+async def test_interfaces_follow_realtime_stats(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    await _setup(hass, mock_config_entry)
+    stats = mock_client.realtime_stats.return_value
+
+    mock_client.realtime_stats.return_value = None
+    await _tick(hass)
+    assert hass.states.get("sensor.truenas_network_enp5s0_download").state == STATE_UNAVAILABLE
+    assert hass.states.get("binary_sensor.truenas_network_enp5s0_link").state == STATE_UNAVAILABLE
+
+    mock_client.realtime_stats.return_value = replace(
+        stats, interfaces={"br0": Interface("br0", True, None, 125000, 0)}
+    )
+    await _tick(hass)
+    assert hass.states.get("sensor.truenas_network_br0_download").state == "1.0"
+    assert hass.states.get("sensor.truenas_network_enp5s0_download").state == STATE_UNAVAILABLE
+    # The ARC hit ratio of the previous read is handed back for idle windows.
+    mock_client.realtime_stats.assert_called_with(95.0)
+
+
+async def test_services_change(hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry) -> None:
+    await _setup(hass, mock_config_entry)
+    mock_client.services.return_value = {"nfs": Service("nfs", True, "RUNNING")}
+    await _tick(hass)
+    assert hass.states.get("binary_sensor.truenas_services_nfs").state == STATE_ON
+    assert hass.states.get("binary_sensor.truenas_services_smb").state == STATE_UNAVAILABLE
+
+    mock_client.services.side_effect = TrueNASPermissionError("EACCES")
+    await _tick(hass)
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    assert hass.states.get("binary_sensor.truenas_services_nfs").state == STATE_UNAVAILABLE
+
+
+async def test_update_checked_slowly(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry, freezer: FrozenDateTimeFactory
+) -> None:
+    await _setup(hass, mock_config_entry)
+
+    async def advance(delta: timedelta) -> None:
+        freezer.tick(delta)
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    await advance(timedelta(seconds=31))
+    assert mock_client.update_info.await_count == 1
+
+    # A failed check keeps the last result and is retried after UPDATE_RETRY, not on every scan.
+    mock_client.update_info.side_effect = TrueNASConnectionError("Timeout calling update.check_available")
+    await advance(timedelta(hours=6))
+    assert mock_client.update_info.await_count == 2
+    assert hass.states.get("update.truenas_update").state == STATE_ON
+    await advance(timedelta(seconds=31))
+    assert mock_client.update_info.await_count == 2
+    await advance(timedelta(minutes=30))
+    assert mock_client.update_info.await_count == 3
+
+    # Installing the update (new version) triggers a check right away.
+    mock_client.update_info.side_effect = None
+    mock_client.update_info.return_value = UpdateInfo(False)
+    mock_client.system_info.return_value = replace(mock_client.system_info.return_value, version="25.04.3")
+    await advance(timedelta(seconds=31))
+    assert mock_client.update_info.await_count == 4
+    state = hass.states.get("update.truenas_update")
+    assert (state.state, state.attributes["latest_version"]) == (STATE_OFF, "25.04.3")
+
+
+async def test_slow_update_check_does_not_block(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """On 25.04 TrueNAS asks the iX update server; a slow answer must not hold up setup or refreshes."""
+    release = asyncio.Event()
+    update = mock_client.update_info.return_value
+
+    async def slow_update() -> UpdateInfo:
+        await release.wait()
+        return update
+
+    mock_client.update_info.side_effect = slow_update
+    mock_config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    assert hass.states.get("update.truenas_update").state == STATE_UNAVAILABLE
+
+    # Refreshes go on, without starting a second check while the first is still running. (Not `_tick`: waiting for
+    # background tasks would wait for the held check.)
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=31))
+    await hass.async_block_till_done()
+    assert mock_client.system_info.await_count == 2
+    assert mock_client.update_info.await_count == 1
+
+    release.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get("update.truenas_update").state == STATE_ON
+
+
+async def test_update_denied(hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry) -> None:
+    mock_client.update_info.side_effect = TrueNASPermissionError("EACCES")
+    await _setup(hass, mock_config_entry)
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    assert hass.states.get("update.truenas_update").state == STATE_UNAVAILABLE
+
+
+async def test_update_reboot_required(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    mock_client.update_info.return_value = UpdateInfo(False, reboot_required=True)
+    await _setup(hass, mock_config_entry)
+    state = hass.states.get("update.truenas_update")
+    assert state.state == STATE_OFF
+    assert "reboot" in state.attributes["release_summary"]
+
+
+async def test_app_stats_resubscribe(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry, freezer: FrozenDateTimeFactory
+) -> None:
+    mock_client.app_stats.return_value = None
+    await _setup(hass, mock_config_entry)
+    assert hass.states.get("sensor.truenas_apps_plex_cpu_usage").state == "unknown"
+
+    async def advance(delta: timedelta) -> None:
+        freezer.tick(delta)
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    # The subscription made on connect gets time to deliver before it is renewed, then only every 5 minutes.
+    await advance(timedelta(seconds=31))
+    mock_client.resubscribe.assert_not_awaited()
+    await advance(timedelta(minutes=5))
+    mock_client.resubscribe.assert_awaited_once_with("app.stats")
+    await advance(timedelta(seconds=31))
+    assert mock_client.resubscribe.await_count == 1
+
+    # No running app: nothing to get stats for.
+    mock_client.apps.return_value = {"nextcloud": mock_client.apps.return_value["nextcloud"]}
+    await advance(timedelta(minutes=5))
+    assert mock_client.resubscribe.await_count == 1
+
+    # A failing resubscribe (e.g. connection lost) doesn't fail the refresh.
+    mock_client.apps.return_value = {"plex": App("plex", "RUNNING", "1.0", False)}
+    mock_client.resubscribe.side_effect = TrueNASConnectionError("down")
+    await advance(timedelta(minutes=5))
+    assert mock_client.resubscribe.await_count == 2
+    assert hass.states.get("sensor.truenas_apps_plex_state").state == "running"
+
+
+async def test_realtime_resubscribe(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry, freezer: FrozenDateTimeFactory
+) -> None:
+    """A realtime feed that stops (e.g. the server dropped the subscription) is subscribed again."""
+    await _setup(hass, mock_config_entry)
+    mock_client.realtime_stats.return_value = None
+    freezer.tick(timedelta(minutes=5))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    mock_client.resubscribe.assert_awaited_once_with("reporting.realtime")
+
+
 async def test_child_devices(hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry) -> None:
     await _setup(hass, mock_config_entry)
     devices = dr.async_get(hass)
     host = devices.async_get_device({(DOMAIN, HOST_ID)})
     assert host.name == "truenas"
+    # Hardware details from DMI.
+    # "Rev X.0x" is ASUS's placeholder revision and is left out.
+    assert (host.manufacturer, host.model, host.hw_version, host.serial_number) == (
+        "ASUSTeK COMPUTER INC.",
+        "B550M",
+        None,
+        "MB-1234567890",
+    )
 
     children = {d.name: d for d in dr.async_entries_for_config_entry(devices, mock_config_entry.entry_id) if d != host}
-    assert set(children) == {"truenas Pool tank", "truenas Pool backup", "truenas Apps", "truenas Data protection"}
+    assert set(children) == {
+        "truenas Pool tank",
+        "truenas Pool backup",
+        "truenas Apps",
+        "truenas Data protection",
+        "truenas Network",
+        "truenas Services",
+    }
     assert all(d.via_device_id == host.id for d in children.values())
 
     entities = er.async_get(hass)
@@ -148,6 +376,12 @@ async def test_child_devices(hass: HomeAssistant, mock_client: AsyncMock, mock_c
         # The boot pool has no pool device; boot and unassigned disks sit on the host.
         "sensor.truenas_disk_nvme0n1_temperature": "truenas",
         "sensor.truenas_disk_sdd_temperature": "truenas",
+        "sensor.truenas_disk_read_rate": "truenas",
+        "update.truenas_update": "truenas",
+        "sensor.truenas_apps_plex_cpu_usage": "truenas Apps",
+        "sensor.truenas_network_enp5s0_download": "truenas Network",
+        "binary_sensor.truenas_network_enp5s0_link": "truenas Network",
+        "binary_sensor.truenas_services_smb": "truenas Services",
     }.items():
         assert devices.async_get(entities.async_get(entity_id).device_id).name == device, entity_id
 
@@ -433,6 +667,9 @@ async def test_diagnostics_redacts(
     assert rsync["state"] == "SUCCESS"
     assert diag["data"]["pools"][0]["status"] == "ONLINE"
     assert diag["data"]["disks"][0]["temperature"] == 34
+    assert diag["data"]["system"]["serial"] == "**REDACTED**"
+    assert diag["data"]["services"][0]["state"] == "STOPPED"
+    assert diag["data"]["update"]["version"] == "25.04.3"
     # Pool names (also dict keys), datasets, task names derived from paths, remotes and free text are all gone.
     text = str(diag)
     for secret in (
@@ -445,5 +682,6 @@ async def test_diagnostics_redacts(
         "photos",
         "plex",
         "WD-WCC7K1",
+        "MB-1234567890",
     ):
         assert secret not in text, secret

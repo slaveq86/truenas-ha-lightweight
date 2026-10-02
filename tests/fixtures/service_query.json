@@ -1,0 +1,65 @@
+[
+  {
+    "id": 1,
+    "service": "ftp",
+    "enable": false,
+    "state": "STOPPED",
+    "pids": []
+  },
+  {
+    "id": 2,
+    "service": "iscsitarget",
+    "enable": false,
+    "state": "STOPPED",
+    "pids": []
+  },
+  {
+    "id": 3,
+    "service": "nfs",
+    "enable": true,
+    "state": "STOPPED",
+    "pids": []
+  },
+  {
+    "id": 4,
+    "service": "snmp",
+    "enable": false,
+    "state": "STOPPED",
+    "pids": []
+  },
+  {
+    "id": 5,
+    "service": "ssh",
+    "enable": true,
+    "state": "RUNNING",
+    "pids": [
+      1532
+    ]
+  },
+  {
+    "id": 6,
+    "service": "ups",
+    "enable": false,
+    "state": "STOPPED",
+    "pids": []
+  },
+  {
+    "id": 7,
+    "service": "smartd",
+    "enable": true,
+    "state": "RUNNING",
+    "pids": [
+      1311
+    ]
+  },
+  {
+    "id": 8,
+    "service": "cifs",
+    "enable": true,
+    "state": "RUNNING",
+    "pids": [
+      2201,
+      2203
+    ]
+  }
+]

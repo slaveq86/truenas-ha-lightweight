@@ -12,18 +12,20 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfInformation, UnitOfTemperature
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfDataRate, UnitOfInformation, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .api import ALERT_LEVELS, TASK_STATES, App, Disk, Pool, Task, TrueNASData
+from .api import ALERT_LEVELS, TASK_STATES, App, Disk, Interface, Pool, Task, TrueNASData
 from .coordinator import TrueNASConfigEntry, TrueNASCoordinator
 from .entity import (
     TASK_KINDS,
     TrueNASEntity,
+    TrueNASInterfaceEntity,
     TrueNASTaskEntity,
     apps_device,
     async_track_items,
+    interface_items,
     pool_device,
     task_items,
 )
@@ -80,6 +82,11 @@ class TrueNASDiskSensorDescription(SensorEntityDescription):
 
 
 @dataclass(frozen=True, kw_only=True)
+class TrueNASInterfaceSensorDescription(SensorEntityDescription):
+    value_fn: Callable[[Interface], Any]
+
+
+@dataclass(frozen=True, kw_only=True)
 class TrueNASTaskSensorDescription(SensorEntityDescription):
     value_fn: Callable[[Task], Any]
     attrs_fn: Callable[[Task], dict[str, Any]] | None = None
@@ -89,6 +96,13 @@ _BYTES = {
     "device_class": SensorDeviceClass.DATA_SIZE,
     "native_unit_of_measurement": UnitOfInformation.BYTES,
     "suggested_unit_of_measurement": UnitOfInformation.GIBIBYTES,
+    "suggested_display_precision": 1,
+}
+
+_RATE = {
+    "device_class": SensorDeviceClass.DATA_RATE,
+    "native_unit_of_measurement": UnitOfDataRate.BYTES_PER_SECOND,
+    "state_class": SensorStateClass.MEASUREMENT,
     "suggested_display_precision": 1,
 }
 
@@ -146,6 +160,40 @@ SYSTEM_SENSORS: tuple[TrueNASSensorDescription, ...] = (
         value_fn=lambda d: d.stats.arc_size if d.stats else None,
         **_BYTES,
     ),
+    TrueNASSensorDescription(
+        key="arc_hit_ratio",
+        translation_key="arc_hit_ratio",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        requires_stats=True,
+        value_fn=lambda d: d.stats.arc_hit_ratio if d.stats else None,
+    ),
+    TrueNASSensorDescription(
+        key="disk_read_rate",
+        translation_key="disk_read_rate",
+        suggested_unit_of_measurement=UnitOfDataRate.MEGABYTES_PER_SECOND,
+        requires_stats=True,
+        value_fn=lambda d: d.stats.disk_read_rate if d.stats else None,
+        **_RATE,
+    ),
+    TrueNASSensorDescription(
+        key="disk_write_rate",
+        translation_key="disk_write_rate",
+        suggested_unit_of_measurement=UnitOfDataRate.MEGABYTES_PER_SECOND,
+        requires_stats=True,
+        value_fn=lambda d: d.stats.disk_write_rate if d.stats else None,
+        **_RATE,
+    ),
+    TrueNASSensorDescription(
+        key="disk_busy",
+        translation_key="disk_busy",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        requires_stats=True,
+        value_fn=lambda d: d.stats.disk_busy if d.stats else None,
+    ),
     *(
         TrueNASSensorDescription(
             key=f"load_{minutes}",
@@ -168,6 +216,7 @@ SYSTEM_SENSORS: tuple[TrueNASSensorDescription, ...] = (
         translation_key="version",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: d.system.version,
+        attrs_fn=lambda d: {"build_time": d.system.build_time.isoformat() if d.system.build_time else None},
     ),
     TrueNASSensorDescription(
         key="active_alerts",
@@ -224,6 +273,41 @@ APP_SENSORS: tuple[TrueNASAppSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENUM,
         options=APP_STATES,
         value_fn=lambda a: _enum(a.state, APP_STATES),
+    ),
+    TrueNASAppSensorDescription(
+        key="cpu_usage",
+        translation_key="app_cpu_usage",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=lambda a: a.cpu_usage,
+    ),
+    TrueNASAppSensorDescription(
+        key="memory",
+        translation_key="app_memory",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        suggested_unit_of_measurement=UnitOfInformation.MEBIBYTES,
+        suggested_display_precision=0,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda a: a.memory,
+    ),
+)
+
+INTERFACE_SENSORS: tuple[TrueNASInterfaceSensorDescription, ...] = (
+    TrueNASInterfaceSensorDescription(
+        key="download",
+        translation_key="interface_download",
+        suggested_unit_of_measurement=UnitOfDataRate.MEGABITS_PER_SECOND,
+        value_fn=lambda i: i.rx_rate,
+        **_RATE,
+    ),
+    TrueNASInterfaceSensorDescription(
+        key="upload",
+        translation_key="interface_upload",
+        suggested_unit_of_measurement=UnitOfDataRate.MEGABITS_PER_SECOND,
+        value_fn=lambda i: i.tx_rate,
+        **_RATE,
     ),
 )
 
@@ -286,6 +370,12 @@ async def async_setup_entry(
         coordinator,
         lambda data: data.disks,
         lambda key: (TrueNASDiskSensor(coordinator, d, key) for d in DISK_SENSORS),
+        async_add_entities,
+    )
+    async_track_items(
+        coordinator,
+        interface_items,
+        lambda name: (TrueNASInterfaceSensor(coordinator, d, name) for d in INTERFACE_SENSORS),
         async_add_entities,
     )
     for kind, descriptions in TASK_SENSORS.items():
@@ -358,7 +448,9 @@ class TrueNASAppSensor(TrueNASEntity, SensorEntity):
         return self.entity_description.value_fn(self.coordinator.data.apps[self._app])
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.entity_description.key != "state":
+            return None
         app = self.coordinator.data.apps[self._app]
         return {"version": app.version}
 
@@ -396,6 +488,20 @@ class TrueNASDiskSensor(TrueNASEntity, SensorEntity):
             "size": disk.size,
             "pool": disk.pool,
         }
+
+
+class TrueNASInterfaceSensor(TrueNASInterfaceEntity, SensorEntity):
+    entity_description: TrueNASInterfaceSensorDescription
+
+    def __init__(
+        self, coordinator: TrueNASCoordinator, description: TrueNASInterfaceSensorDescription, name: str
+    ) -> None:
+        super().__init__(coordinator, description.key, name)
+        self.entity_description = description
+
+    @property
+    def native_value(self) -> Any:
+        return self.entity_description.value_fn(self.interface)
 
 
 class TrueNASTaskSensor(TrueNASTaskEntity, SensorEntity):

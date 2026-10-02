@@ -18,7 +18,7 @@ scripts/develop        # local HA instance for manual testing
 ```
 
 ## Hard rules
-- **Read-only**: only call query/info/list methods and `core.subscribe`. Never add a method that mutates TrueNAS state (start/stop apps, dismiss alerts, scrubs, updates…) — the key's role would reject it anyway and it breaks the integration's promise.
+- **Read-only**: only call query/info/list methods, `update.status` / `update.check_available` (SYSTEM_UPDATE_READ) and `core.subscribe` / `core.unsubscribe` (session-only). Never add a method that mutates TrueNAS state (start/stop apps, dismiss alerts, scrubs, updates…) — the key's role would reject it anyway and it breaks the integration's promise.
 - **wss:// only**: TrueNAS revokes API keys sent over plain ws. Never add an http/ws option.
 - **No runtime dependencies**: `manifest.json` `requirements` stays empty; use aiohttp from HA.
 - `hacs.json` accepts only HACS's documented keys (`name`, `homeassistant`, `country`, `hacs`, `zip_release`, `filename`, `content_in_root`, `hide_default_branch`, `persistent_directory`) — anything else (e.g. old `render_readme`) fails validation.
