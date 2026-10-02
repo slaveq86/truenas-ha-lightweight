@@ -10,6 +10,12 @@
 # Entity ids of the host assume the TrueNAS hostname "truenas"
 # (e.g. sensor.truenas_cpu_usage). If yours differs, find/replace "sensor.truenas_",
 # "binary_sensor.truenas_" and "update.truenas_" with your prefix.
+# Newer Home Assistant versions also put the area name in front when the TrueNAS
+# device is assigned to an area (e.g. sensor.office_truenas_disk_busy), and only for
+# entities created after that, so old and new entities can have different prefixes.
+# Look the real ids up in Developer tools → States (search "truenas") before replacing.
+# The pools, disks, network, apps, services and tasks lists find their entities by
+# device and are not affected.
 #
 # Usage: Settings → Dashboards → Add dashboard → open it → ⋮ → Edit dashboard →
 # ⋮ → Raw configuration editor → paste this file → Save.

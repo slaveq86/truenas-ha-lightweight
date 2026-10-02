@@ -104,8 +104,11 @@ update, CPU/memory/disk gauges and graphs, and compact lists of pools, disks, ne
 memory, version, updates), services and rsync/snapshot tasks that pick up new items automatically. It is laid out as
 three independent columns, so a long alert or disk list doesn't leave gaps next to it; the alert and task lists are
 capped (problems first). The disk temperature and network graphs need the
-[auto-entities](https://github.com/thomasloven/lovelace-auto-entities) card (HACS → Frontend). Host entity ids assume the hostname `truenas`; find/replace `sensor.truenas_` and
-`binary_sensor.truenas_` if yours differs. Paste it via a new dashboard's **Edit → ⋮ → Raw configuration editor**.
+[auto-entities](https://github.com/thomasloven/lovelace-auto-entities) card (HACS → Frontend). Host entity ids assume the hostname `truenas`; find/replace `sensor.truenas_`,
+`binary_sensor.truenas_` and `update.truenas_` if yours differs. Newer Home Assistant versions also put the area name in
+front of the ids of entities created after the device was assigned to an area (e.g. `sensor.office_truenas_disk_busy`),
+so check the real ids in **Developer tools → States** first; the lists find their entities by device and need no
+changes. Paste it via a new dashboard's **Edit → ⋮ → Raw configuration editor**.
 
 ## Creating a read-only API key
 
