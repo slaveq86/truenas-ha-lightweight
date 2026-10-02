@@ -8,6 +8,8 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-02
+
 ### Added
 
 - Network interface entities on a new *Network* device: download and upload rate, and a link sensor with the link
