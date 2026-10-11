@@ -1,0 +1,43 @@
+# Notifies when a TrueNAS Lightweight disk temperature goes above a threshold.
+#
+# Fires once each time a disk crosses the threshold (default 60 °C) from below;
+# it fires again only after the disk cooled down to the threshold or less first.
+# Disk temperatures are read every 5 minutes. All disk temperature sensors of the
+# integration are covered, including disks added later; CPU temperature is not.
+#
+# Import: Settings → Automations & scenes → Create automation → ⋮ → Edit in YAML,
+# paste this file, then replace the notify target below with your own device.
+alias: TrueNAS disk temperature high
+description: Notify when a TrueNAS disk gets hotter than 60 °C.
+mode: queued
+max_exceeded: silent
+variables:
+  threshold: 60 # °C
+triggers:
+  # Every state change, filtered by the condition below (state triggers can't
+  # take a dynamic list of entities).
+  - trigger: event
+    event_type: state_changed
+conditions:
+  - condition: template
+    value_template: >-
+      {%- set e = trigger.event.data.entity_id %}
+      {%- set old = trigger.event.data.old_state %}
+      {%- set new = trigger.event.data.new_state %}
+      {{ e.startswith('sensor.') and old is not none and new is not none
+         and new.attributes.get('device_class') == 'temperature'
+         and new.attributes.get('disk') is not none
+         and old.state | is_number and new.state | is_number
+         and old.state | float <= threshold < new.state | float
+         and e in integration_entities('truenas_lightweight') }}
+actions:
+  - action: notify.send_message
+    metadata: {}
+    target:
+      device_id: abcd123 # ← your phone / notify device
+    data:
+      title: TrueNAS disk temperature
+      message: >-
+        {%- set a = trigger.event.data.new_state.attributes %}
+        Disk {{ a.disk }}{{ ' (' ~ a.model ~ ')' if a.model }}{{ ' in pool ' ~ a.pool if a.pool }}
+        is at {{ trigger.event.data.new_state.state | float | round(0) | int }} °C (above {{ threshold }} °C).
