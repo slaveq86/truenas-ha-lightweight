@@ -1,0 +1,45 @@
+# Notifies when an rsync or periodic snapshot task of TrueNAS Lightweight fails.
+#
+# Fires when a task's *problem* binary sensor turns on: its last run failed or was
+# aborted, or the task went on hold (e.g. its dataset is locked). Tasks are found by
+# their *Data protection* device, so new tasks are covered without editing this file.
+# Nothing is sent for tasks already failing when Home Assistant starts.
+#
+# Import: Settings → Automations & scenes → Create automation → ⋮ → Edit in YAML,
+# paste this file, then replace the notify target below with your own device.
+alias: TrueNAS data protection task failed
+description: Notify when a TrueNAS rsync or snapshot task fails.
+mode: queued
+max_exceeded: silent
+triggers:
+  # Every state change, filtered by the condition below (state triggers can't
+  # take a dynamic list of entities).
+  - trigger: event
+    event_type: state_changed
+conditions:
+  - condition: template
+    value_template: >-
+      {%- set e = trigger.event.data.entity_id %}
+      {%- set old = trigger.event.data.old_state %}
+      {%- set new = trigger.event.data.new_state %}
+      {{ e.startswith('binary_sensor.') and old is not none and new is not none
+         and old.state == 'off' and new.state == 'on'
+         and new.attributes.get('device_class') == 'problem'
+         and e in integration_entities('truenas_lightweight')
+         and device_attr(device_id(e), 'model') == 'Data protection' }}
+actions:
+  - variables:
+      entity: "{{ trigger.event.data.entity_id }}"
+      device_name: "{{ device_attr(device_id(entity), 'name_by_user') or device_attr(device_id(entity), 'name') }}"
+      task: >-
+        {%- set fn = trigger.event.data.new_state.name %}
+        {%- set fn = fn[device_name | length + 1:] if fn.startswith(device_name ~ ' ') else fn %}
+        {{ fn[:-8] if fn.endswith(' problem') else fn }}
+      error: "{{ trigger.event.data.new_state.attributes.get('error') or '' }}"
+  - action: notify.send_message
+    metadata: {}
+    target:
+      device_id: abcd123 # ← your phone / notify device
+    data:
+      title: TrueNAS data protection
+      message: "{{ task }} failed{{ ': ' ~ error if error }}"

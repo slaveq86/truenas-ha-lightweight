@@ -97,6 +97,20 @@ automation:
           message: "{{ trigger.event.data.message }}"
 ```
 
+## Example automations
+
+[`automations/`](automations) has ready-made notification automations, one per file:
+
+| File | Notifies when |
+|---|---|
+| [`data_protection_failed.yaml`](automations/data_protection_failed.yaml) | an rsync or periodic snapshot task fails, is aborted or goes on hold; the message includes the task's error |
+| [`disk_temperature_high.yaml`](automations/disk_temperature_high.yaml) | a disk gets hotter than 60 °C (`threshold` variable); once per crossing, again only after it cooled down |
+
+Both find their entities through the integration, so new tasks and disks are covered without edits, and stay quiet
+about problems that already exist when Home Assistant starts. To use one, create a new automation, pick
+**⋮ → Edit in YAML**, paste the file and replace the `device_id` in the `notify.send_message` target with your phone
+(or swap the action for any other notify action).
+
 ## Dashboard
 
 [`examples/dashboard.yaml`](examples/dashboard.yaml) is a ready-made dashboard with health, alerts and the TrueNAS

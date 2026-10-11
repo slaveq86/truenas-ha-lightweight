@@ -8,6 +8,11 @@ new version heading, tags it and publishes a GitHub release. If Unreleased is em
 
 ## [Unreleased]
 
+### Added
+
+- Example automations in `automations/`: a notification when a data protection task fails, and one when a disk gets
+  hotter than 60 °C.
+
 ## [0.3.0] - 2026-10-02
 
 ### Added

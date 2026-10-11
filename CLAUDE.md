@@ -5,6 +5,7 @@ Read-only Home Assistant custom integration (domain `truenas_lightweight`) for T
 ## Layout
 - `custom_components/truenas_lightweight/` – the integration (see its CLAUDE.md)
   - `api/` – HA-agnostic WebSocket client + models (see its CLAUDE.md)
+- `automations/` – example notification automations (one per file, pasted via *Edit in YAML*; tested by `tests/test_automations.py`)
 - `tests/` – pytest-homeassistant-custom-component tests (see its CLAUDE.md)
 - `scripts/` – `setup`, `lint`, `develop` (runs HA on :8123 with `config/`), `release.py` (used by CI)
 - `.github/workflows/` – `validate.yml` (hassfest + HACS), `tests.yml` (ruff + pytest, PRs and reused by release), `release.yml`

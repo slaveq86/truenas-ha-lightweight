@@ -10,6 +10,7 @@ Run with `pytest` (Python 3.13, `pytest-homeassistant-custom-component` pinned i
 ## Files
 - `test_client.py` – real client against `FakeTrueNAS`, an in-process aiohttp JSON-RPC server on 127.0.0.1 (needs the `socket_enabled` fixture). Extend `FakeTrueNAS.responses` for new methods (unknown ones get JSON-RPC -32601, which is how 25.04 answers `update.status`); `core.subscribe` replies with the first frame from `events[collection]` (deny one with `denied_collections`); `junk` (frames sent before the next reply, build them with `event()`) and `raw_errors` (malformed error payloads) exercise the client's handling of bad server messages.
 - `test_config_flow.py` – user/reauth/options flows; `async_setup_entry` is patched out.
+- `test_automations.py` – loads each `automations/*.yaml` into HA (notify swapped for a mock service) and drives the entities through it.
 - `test_init.py` – setup, entity states, dynamic pools/apps, coordinator error paths, diagnostics.
 
 ## Gotchas
